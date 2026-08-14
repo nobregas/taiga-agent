@@ -34,6 +34,22 @@ export const taskDraftSchema = z.object({
     ),
   description: z.string().optional(),
   statusId: z.number().optional(),
+  gitlabInformed: z.boolean().optional(),
+  branchComplete: z.boolean().optional(),
+  inferredFrom: z.array(z.string()).optional(),
+});
+
+export const gitlabEnrichmentSchema = z.object({
+  sourceBranch: z.string().min(1),
+  baseBranch: z.string().min(1),
+  enrichedAt: z.string().min(1),
+  stats: z.object({
+    totalCommits: z.number(),
+    filesChanged: z.number(),
+    linesAdded: z.number(),
+    linesRemoved: z.number(),
+  }),
+  pathsConsidered: z.array(z.string()),
 });
 
 export const draftSchema = z.object({
@@ -51,6 +67,7 @@ export const draftSchema = z.object({
   milestoneId: z.number().nullable().optional(),
   tasks: z.array(taskDraftSchema),
   gitNotes: z.string().optional(),
+  gitlabEnrichment: gitlabEnrichmentSchema.optional(),
   mode: z.enum(['new_us', 'existing_us', 'retrospective']).optional(),
   existingUserStoryId: z.number().optional(),
   existingUserStoryRef: z.number().optional(),
@@ -73,6 +90,7 @@ export const generateRequestSchema = z
     tasksFromCall: z.string().optional(),
     enrichWithGitlab: z.boolean().default(false),
     gitlabBranch: z.string().optional(),
+    gitlabCompareBase: z.string().optional(),
     existingUserStoryId: z.number().optional(),
     existingUserStoryRef: z.number().optional(),
   })

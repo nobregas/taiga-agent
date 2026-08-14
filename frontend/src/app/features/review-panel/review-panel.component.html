@@ -76,18 +76,58 @@
           <textarea formControlName="gitNotes" rows="2"></textarea>
         </label>
 
-        @if (branchContext) {
+        @if (branchContext || gitlabEnrichment) {
           <div class="gitlab-box">
-            <strong>GitLab — {{ branchContext.branch }}</strong>
-            <p>
-              {{ branchContext.stats.totalCommits }} commits ·
-              {{ branchContext.stats.filesChanged }} arquivos
-            </p>
+            <div class="gitlab-box__head">
+              <strong>GitLab — {{ branchContext?.branch ?? gitlabEnrichment?.sourceBranch }}</strong>
+              <span class="badge badge--gitlab">Contexto aplicado na geracao</span>
+            </div>
+            @if (branchContext || gitlabEnrichment) {
+              <p>
+                {{ (branchContext?.stats ?? gitlabEnrichment?.stats)?.totalCommits }} commits ·
+                {{ (branchContext?.stats ?? gitlabEnrichment?.stats)?.filesChanged }} arquivos ·
+                +{{ (branchContext?.stats ?? gitlabEnrichment?.stats)?.linesAdded }}/-{{ (branchContext?.stats ?? gitlabEnrichment?.stats)?.linesRemoved }} linhas
+              </p>
+            }
+            @if (gitlabEnrichment) {
+              <p class="hint">
+                Comparado com <code>{{ gitlabEnrichment.baseBranch }}</code> em
+                {{ gitlabEnrichment.enrichedAt | date: 'short' }}
+              </p>
+            }
+            @if (gitlabInformedTaskCount) {
+              <p class="gitlab-box__summary">
+                {{ gitlabInformedTaskCount }} task(s) informadas pela branch ·
+                {{ gitlabCompleteTaskCount }} concluida(s) ·
+                {{ gitlabPendingTaskCount }} pendente(s)
+              </p>
+            }
+            @if (gitlabEnrichment?.pathsConsidered?.length) {
+              <details class="gitlab-paths">
+                <summary>Arquivos considerados ({{ gitlabEnrichment!.pathsConsidered.length }})</summary>
+                <ul>
+                  @for (path of gitlabEnrichment!.pathsConsidered; track path) {
+                    <li><code>{{ path }}</code></li>
+                  }
+                </ul>
+              </details>
+            }
           </div>
         }
       }
 
       @if (activeTab === 'tasks') {
+        @if (gitlabEnrichment) {
+          <div class="gitlab-summary">
+            <strong>Analise da branch {{ gitlabEnrichment.sourceBranch }}</strong>
+            <p>
+              {{ gitlabInformedTaskCount }} de {{ tasks.length }} tasks usaram o contexto GitLab ·
+              <span class="text-done">{{ gitlabCompleteTaskCount }} concluidas</span> ·
+              <span class="text-pending">{{ gitlabPendingTaskCount }} pendentes</span>
+            </p>
+          </div>
+        }
+
         <div class="tasks-toolbar">
           <p>Prefixo por dominio: [Pedido], [Checkout], [Pagamento] — nunca o escopo da US</p>
           <div class="tasks-toolbar-actions">
@@ -107,13 +147,30 @@
 
         <div formArrayName="tasks" class="tasks-list">
           @for (task of tasks.controls; track $index) {
-            <div class="task-card" [formGroupName]="$index">
+            <div class="task-card" [formGroupName]="$index" [class.task-card--gitlab-done]="isTaskBranchComplete($index)" [class.task-card--gitlab-pending]="isTaskGitlabInformed($index) && !isTaskBranchComplete($index)">
               <div class="task-head">
-                <strong>Task {{ $index + 1 }}</strong>
+                <div class="task-head__title">
+                  <strong>Task {{ $index + 1 }}</strong>
+                  @if (isTaskGitlabInformed($index)) {
+                    <div class="task-badges">
+                      <span class="badge badge--gitlab">Da branch</span>
+                      @if (isTaskBranchComplete($index)) {
+                        <span class="badge badge--done">Concluida na branch</span>
+                      } @else {
+                        <span class="badge badge--pending">Pendente na branch</span>
+                      }
+                    </div>
+                  }
+                </div>
                 <button type="button" class="btn danger sm" (click)="removeTask($index)">Remover</button>
               </div>
               <input formControlName="subject" placeholder="[Checkout] Adicionar QRcode ao pagamento" />
               <textarea formControlName="description" rows="2" placeholder="Detalhes opcionais"></textarea>
+              @if (taskInferredFrom($index).length) {
+                <small class="hint task-evidence">
+                  Evidencias: {{ taskInferredFrom($index).join(' · ') }}
+                </small>
+              }
               <div class="field">
                 <span>Status</span>
                 <div class="status-buttons">

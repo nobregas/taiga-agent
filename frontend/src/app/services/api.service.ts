@@ -31,6 +31,12 @@ export class ApiService {
     });
   }
 
+  searchGitlabBranches(query = ''): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseUrl}/config/gitlab/branches`, {
+      params: { q: query },
+    });
+  }
+
   listRecentUserStories(): Observable<UserStorySearchResult[]> {
     return this.http.get<UserStorySearchResult[]>(`${this.baseUrl}/config/userstories/recent`);
   }

@@ -190,6 +190,13 @@
   margin-top: 0.25rem;
 }
 
+.branch-existing-grid {
+  display: grid;
+  grid-template-columns: 1fr minmax(8rem, 0.55fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
 .prefix-row {
   display: flex;
   flex-wrap: wrap;
@@ -402,6 +409,10 @@ textarea:focus {
 
   .field--escopo input {
     max-width: 6.5rem;
+  }
+
+  .branch-existing-grid {
+    grid-template-columns: 1fr;
   }
 
   .tabs {

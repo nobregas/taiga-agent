@@ -56,13 +56,22 @@ function truncateSnippet(diff: string, maxLines = config.gitlab.diffSnippetLines
     .join('\n');
 }
 
+/**
+ * GitLab integration is read-only by design.
+ * Only GET endpoints are called (commits + compare). No writes to GitLab.
+ */
 export class GitlabService {
-  private async request<T>(path: string): Promise<T> {
+  private async get<T>(path: string): Promise<T> {
     if (!config.gitlab.token) {
       throw new Error('GITLAB_TOKEN is not configured');
     }
 
+    if (!path.startsWith('/')) {
+      throw new Error('GitLab API path must start with /');
+    }
+
     const response = await fetch(`${config.gitlab.url}${path}`, {
+      method: 'GET',
       headers: {
         'PRIVATE-TOKEN': config.gitlab.token,
       },
@@ -76,7 +85,29 @@ export class GitlabService {
     return response.json() as Promise<T>;
   }
 
-  async getBranchContext(branch: string): Promise<BranchContext> {
+  async searchBranches(query = '', limit = 20): Promise<string[]> {
+    if (!config.gitlab.projectId) {
+      throw new Error('GITLAB_PROJECT_ID is not configured');
+    }
+
+    const projectId = encodeURIComponent(config.gitlab.projectId);
+    const params = new URLSearchParams({
+      per_page: String(Math.min(Math.max(limit, 1), 100)),
+    });
+
+    const trimmed = query.trim();
+    if (trimmed) {
+      params.set('search', trimmed);
+    }
+
+    const branches = await this.get<Array<{ name: string }>>(
+      `/projects/${projectId}/repository/branches?${params.toString()}`,
+    );
+
+    return branches.map((branch) => branch.name).slice(0, limit);
+  }
+
+  async getBranchContext(branch: string, compareBase = config.gitlab.defaultBase): Promise<BranchContext> {
     if (!config.gitlab.projectId) {
       throw new Error('GITLAB_PROJECT_ID is not configured');
     }
@@ -100,11 +131,11 @@ export class GitlabService {
     };
 
     const [commits, compare] = await Promise.all([
-      this.request<GitlabCommit[]>(
+      this.get<GitlabCommit[]>(
         `/projects/${projectId}/repository/commits?ref_name=${encodedBranch}&per_page=100`,
       ),
-      this.request<GitlabCompare>(
-        `/projects/${projectId}/repository/compare?from=${encodeURIComponent(config.gitlab.defaultBase)}&to=${encodedBranch}`,
+      this.get<GitlabCompare>(
+        `/projects/${projectId}/repository/compare?from=${encodeURIComponent(compareBase)}&to=${encodedBranch}`,
       ).catch(() => ({ commits: [], diffs: [] } as GitlabCompare)),
     ]);
 

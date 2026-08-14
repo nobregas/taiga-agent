@@ -29,6 +29,17 @@ export interface TaskDraft {
   subject: string;
   description?: string;
   statusId?: number;
+  gitlabInformed?: boolean;
+  branchComplete?: boolean;
+  inferredFrom?: string[];
+}
+
+export interface GitlabEnrichmentMeta {
+  sourceBranch: string;
+  baseBranch: string;
+  enrichedAt: string;
+  stats: BranchContextPreview['stats'];
+  pathsConsidered: string[];
 }
 
 export interface Draft {
@@ -46,6 +57,7 @@ export interface Draft {
   milestoneId?: number | null;
   tasks: TaskDraft[];
   gitNotes?: string;
+  gitlabEnrichment?: GitlabEnrichmentMeta;
   mode?: GenerationMode;
   existingUserStoryId?: number;
   existingUserStoryRef?: number;
@@ -63,6 +75,7 @@ export interface GenerateRequest {
   tasksFromCall?: string;
   enrichWithGitlab?: boolean;
   gitlabBranch?: string;
+  gitlabCompareBase?: string;
   existingUserStoryId?: number;
   existingUserStoryRef?: number;
 }
@@ -124,6 +137,7 @@ export interface ProjectMeta {
   validTaskDomains: string[];
   currentUser: TaigaUser | null;
   gitlabConfigured: boolean;
+  defaultGitlabBaseBranch?: string;
   geminiConfigured: boolean;
   warning?: string;
 }

@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output, inject, OnInit } from '@angular/core';
+import { Component, DestroyRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject, OnInit } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import {
   BRANCH_PREFIXES,
@@ -16,18 +19,23 @@ import {
   templateUrl: './draft-form.component.html',
   styleUrl: './draft-form.component.scss',
 })
-export class DraftFormComponent implements OnInit {
+export class DraftFormComponent implements OnInit, OnChanges {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ApiService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly branchSearch$ = new Subject<string>();
+  private readonly usSearch$ = new Subject<string>();
 
   @Input() meta: ProjectMeta | null = null;
   @Input() loading = false;
   @Output() generate = new EventEmitter<GenerateRequest>();
   @Output() openExisting = new EventEmitter<number>();
 
-  activeTab: 'basico' | 'detalhes' | 'gitlab' = 'basico';
+  activeTab: 'basico' | 'detalhes' = 'basico';
   searchResults: Array<{ id: number; ref: number; subject: string }> = [];
   usSuggestionsOpen = false;
+  branchResults: string[] = [];
+  branchSuggestionsField: 'branch' | 'compareBase' | null = null;
   selectedBranchPrefix = 'feat';
   readonly branchPrefixes = BRANCH_PREFIXES;
 
@@ -45,20 +53,57 @@ export class DraftFormComponent implements OnInit {
     objetivo: [''],
     criteriosAceite: [''],
     branch: [''],
+    gitlabCompareBase: ['develop'],
     tasksFromCall: [''],
-    enrichWithGitlab: [false],
-    gitlabBranch: [''],
     existingUserStoryRef: [''],
     existingUserStoryTitle: [''],
   });
 
+  private metaDefaultsApplied = false;
+
   ngOnInit(): void {
     this.applyModeValidators(this.form.controls.mode.value);
     this.form.controls.mode.valueChanges.subscribe((mode) => this.applyModeValidators(mode));
+
+    this.branchSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((query) => this.api.searchGitlabBranches(query)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((results) => {
+        this.branchResults = results;
+      });
+
+    this.usSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((query) => this.api.searchUserStories(query)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((results) => {
+        this.searchResults = results;
+      });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['meta'] && this.meta?.defaultGitlabBaseBranch && !this.metaDefaultsApplied) {
+      this.form.patchValue(
+        { gitlabCompareBase: this.meta.defaultGitlabBaseBranch },
+        { emitEvent: false },
+      );
+      this.metaDefaultsApplied = true;
+    }
   }
 
   get isExistingUsMode(): boolean {
     return this.form.controls.mode.value === 'existing_us';
+  }
+
+  get gitlabConfigured(): boolean {
+    return Boolean(this.meta?.gitlabConfigured);
   }
 
   get submitLabel(): string {
@@ -103,7 +148,7 @@ export class DraftFormComponent implements OnInit {
       : ['App', 'Backend', 'Portal', 'Pedido', 'Checkout'];
   }
 
-  setTab(tab: 'basico' | 'detalhes' | 'gitlab'): void {
+  setTab(tab: 'basico' | 'detalhes'): void {
     this.activeTab = tab;
   }
 
@@ -122,12 +167,12 @@ export class DraftFormComponent implements OnInit {
 
   onUsAutocompleteFocus(): void {
     this.usSuggestionsOpen = true;
-    this.loadUsSuggestions(this.form.controls.existingUserStoryTitle.value.trim());
+    this.fetchUsSuggestionsNow(this.form.controls.existingUserStoryTitle.value.trim());
   }
 
   onUsAutocompleteInput(): void {
     this.usSuggestionsOpen = true;
-    this.loadUsSuggestions(this.form.controls.existingUserStoryTitle.value.trim());
+    this.queueUsSuggestions(this.form.controls.existingUserStoryTitle.value.trim());
   }
 
   closeUsSuggestions(): void {
@@ -136,7 +181,11 @@ export class DraftFormComponent implements OnInit {
     }, 150);
   }
 
-  private loadUsSuggestions(query: string): void {
+  private queueUsSuggestions(query: string): void {
+    this.usSearch$.next(query);
+  }
+
+  private fetchUsSuggestionsNow(query: string): void {
     this.api.searchUserStories(query).subscribe((results) => {
       this.searchResults = results;
     });
@@ -149,6 +198,62 @@ export class DraftFormComponent implements OnInit {
     });
     this.searchResults = [];
     this.usSuggestionsOpen = false;
+  }
+
+  onBranchAutocompleteFocus(field: 'branch' | 'compareBase'): void {
+    if (!this.meta?.gitlabConfigured) return;
+
+    this.branchSuggestionsField = field;
+    const query =
+      field === 'compareBase'
+        ? this.form.controls.gitlabCompareBase.value.trim()
+        : this.form.controls.branch.value.trim();
+    this.fetchBranchSuggestionsNow(query);
+  }
+
+  onBranchAutocompleteInput(field: 'branch' | 'compareBase'): void {
+    if (!this.meta?.gitlabConfigured) return;
+
+    this.branchSuggestionsField = field;
+    const query =
+      field === 'compareBase'
+        ? this.form.controls.gitlabCompareBase.value.trim()
+        : this.form.controls.branch.value.trim();
+    this.queueBranchSuggestions(query);
+  }
+
+  closeBranchSuggestions(): void {
+    window.setTimeout(() => {
+      this.branchSuggestionsField = null;
+    }, 150);
+  }
+
+  private queueBranchSuggestions(query: string): void {
+    this.branchSearch$.next(query);
+  }
+
+  private fetchBranchSuggestionsNow(query: string): void {
+    this.api.searchGitlabBranches(query).subscribe((results) => {
+      this.branchResults = results;
+    });
+  }
+
+  selectBranch(branch: string, field: 'branch' | 'compareBase'): void {
+    if (field === 'compareBase') {
+      this.form.patchValue({ gitlabCompareBase: branch });
+    } else {
+      this.form.patchValue({ branch });
+      const slashIndex = branch.indexOf('/');
+      if (slashIndex > 0) {
+        const prefix = branch.slice(0, slashIndex);
+        if ((this.branchPrefixes as readonly string[]).includes(prefix)) {
+          this.selectedBranchPrefix = prefix;
+        }
+      }
+    }
+
+    this.branchResults = [];
+    this.branchSuggestionsField = null;
   }
 
   submit(): void {
@@ -175,9 +280,11 @@ export class DraftFormComponent implements OnInit {
       : undefined;
 
     let branch = value.branch.trim();
-    if (branch && !branch.includes('/')) {
+    if (branch && !this.gitlabConfigured && !branch.includes('/')) {
       branch = `${this.selectedBranchPrefix}/${branch}`;
     }
+
+    const enrichWithGitlab = this.gitlabConfigured && Boolean(branch);
 
     this.generate.emit({
       mode: value.mode,
@@ -189,8 +296,9 @@ export class DraftFormComponent implements OnInit {
       branch: branch || undefined,
       branchPrefix: this.selectedBranchPrefix,
       tasksFromCall: value.tasksFromCall || undefined,
-      enrichWithGitlab: value.enrichWithGitlab || value.mode === 'retrospective',
-      gitlabBranch: value.gitlabBranch || value.branch || undefined,
+      enrichWithGitlab,
+      gitlabBranch: enrichWithGitlab ? branch : undefined,
+      gitlabCompareBase: enrichWithGitlab ? value.gitlabCompareBase.trim() || 'develop' : undefined,
       existingUserStoryRef: Number.isFinite(existingRef) ? existingRef : undefined,
     });
   }

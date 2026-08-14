@@ -71,6 +71,9 @@ export class ReviewPanelComponent {
             subject: [task.subject, Validators.required],
             description: [task.description ?? ''],
             statusId: [task.statusId ?? defaultTaskStatus ?? 0],
+            gitlabInformed: [task.gitlabInformed ?? false],
+            branchComplete: [task.branchComplete ?? false],
+            inferredFrom: [task.inferredFrom ?? [] as string[]],
           }),
         ),
       ),
@@ -106,6 +109,36 @@ export class ReviewPanelComponent {
 
   get doneStatusId(): number | undefined {
     return findDoneStatusId(this.taskStatuses);
+  }
+
+  get gitlabEnrichment() {
+    return this.sourceDraft?.gitlabEnrichment ?? null;
+  }
+
+  get gitlabInformedTaskCount(): number {
+    return this.tasks.controls.filter((task) => task.get('gitlabInformed')?.value).length;
+  }
+
+  get gitlabCompleteTaskCount(): number {
+    return this.tasks.controls.filter((task) => task.get('branchComplete')?.value).length;
+  }
+
+  get gitlabPendingTaskCount(): number {
+    return this.tasks.controls.filter(
+      (task) => task.get('gitlabInformed')?.value && !task.get('branchComplete')?.value,
+    ).length;
+  }
+
+  isTaskGitlabInformed(index: number): boolean {
+    return Boolean(this.tasks.at(index).get('gitlabInformed')?.value);
+  }
+
+  isTaskBranchComplete(index: number): boolean {
+    return Boolean(this.tasks.at(index).get('branchComplete')?.value);
+  }
+
+  taskInferredFrom(index: number): string[] {
+    return (this.tasks.at(index).get('inferredFrom')?.value as string[]) ?? [];
   }
 
   setTab(tab: 'us' | 'tasks'): void {
@@ -179,6 +212,9 @@ export class ReviewPanelComponent {
         subject: ['', Validators.required],
         description: [''],
         statusId: [defaultTaskStatus ?? 0],
+        gitlabInformed: [false],
+        branchComplete: [false],
+        inferredFrom: [[] as string[]],
       }),
     );
     this.activeTab = 'tasks';
@@ -207,10 +243,25 @@ export class ReviewPanelComponent {
       usStatusId: value.usStatusId,
       milestoneId: value.milestoneId,
       gitNotes: value.gitNotes || undefined,
+      gitlabEnrichment: this.sourceDraft?.gitlabEnrichment,
       mode: this.sourceDraft?.mode,
       existingUserStoryId: this.sourceDraft?.existingUserStoryId,
       existingUserStoryRef: this.sourceDraft?.existingUserStoryRef,
-      tasks: value.tasks,
+      tasks: value.tasks.map((task: {
+        subject: string;
+        description?: string;
+        statusId: number;
+        gitlabInformed?: boolean;
+        branchComplete?: boolean;
+        inferredFrom?: string[];
+      }) => ({
+        subject: task.subject,
+        description: task.description,
+        statusId: task.statusId,
+        gitlabInformed: task.gitlabInformed,
+        branchComplete: task.branchComplete,
+        inferredFrom: task.inferredFrom,
+      })),
     };
   }
 

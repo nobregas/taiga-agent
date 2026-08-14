@@ -281,8 +281,127 @@ textarea:focus {
   font-size: 0.8125rem;
 }
 
+.gitlab-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  background: var(--bg);
+}
+
+.gitlab-box__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.gitlab-box p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.gitlab-box__summary {
+  color: var(--text) !important;
+  font-weight: 500;
+}
+
+.gitlab-paths {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.gitlab-paths summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.gitlab-paths ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+.gitlab-summary {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.85rem;
+  background: var(--bg);
+}
+
+.gitlab-summary strong {
+  font-size: 0.8125rem;
+}
+
+.gitlab-summary p {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.text-done {
+  color: #166534;
+  font-weight: 600;
+}
+
+.text-pending {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.badge--gitlab {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge--done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge--pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.task-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.task-head__title {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.task-evidence {
+  display: block;
+  line-height: 1.4;
+}
+
+.task-card--gitlab-done {
+  border-color: #86efac;
+}
+
+.task-card--gitlab-pending {
+  border-color: #fcd34d;
+}
+
 .preview-box,
-.gitlab-box,
 .success-box {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);

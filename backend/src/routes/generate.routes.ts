@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { isGitlabConfigured } from '../config.js';
+import { config, isGitlabConfigured } from '../config.js';
 import { generateRequestSchema } from '../schemas/draft.schema.js';
 import { buildUsDescription, buildUsSubject } from '../schemas/draft.schema.js';
 import { geminiService } from '../services/gemini.service.js';
@@ -22,20 +22,31 @@ generateRouter.post('/', async (req, res, next) => {
     let branchContext;
     let branchContextText: string | undefined;
 
-    const branch = request.gitlabBranch?.trim();
-    if (request.enrichWithGitlab && branch) {
-      if (!isGitlabConfigured()) {
-        res.status(400).json({ error: 'GitLab is not configured on the server' });
-        return;
-      }
+    const branchName = (request.gitlabBranch?.trim() || request.branch?.trim()) ?? '';
 
-      branchContext = await gitlabService.getBranchContext(branch);
+    if (isGitlabConfigured() && branchName) {
+      const compareBase =
+        request.gitlabCompareBase?.trim() || config.gitlab.defaultBase;
+
+      branchContext = await gitlabService.getBranchContext(branchName, compareBase);
       branchContextText = gitlabService.formatContextForPrompt(branchContext);
     }
 
     const draft = await geminiService.generateDraft(request, meta, branchContext, branchContextText);
     if (draft.milestoneId == null && meta.defaultSprintId) {
       draft.milestoneId = meta.defaultSprintId;
+    }
+
+    if (branchContext) {
+      const compareBase =
+        request.gitlabCompareBase?.trim() || config.gitlab.defaultBase;
+      draft.gitlabEnrichment = {
+        sourceBranch: branchContext.branch,
+        baseBranch: compareBase,
+        enrichedAt: new Date().toISOString(),
+        stats: branchContext.stats,
+        pathsConsidered: branchContext.diffSummary.slice(0, 15).map((item) => item.path),
+      };
     }
 
     res.json({

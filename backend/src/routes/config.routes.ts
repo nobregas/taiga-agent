@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { config, isGitlabConfigured } from '../config.js';
 import { buildDraftFromUserStory } from '../utils/us.mapper.js';
+import { gitlabService } from '../services/gitlab.service.js';
 import { taigaService } from '../services/taiga.service.js';
 
 export const configRouter = Router();
@@ -21,6 +22,7 @@ configRouter.get('/meta', async (_req, res) => {
       validTaskDomains: config.validTaskDomains ?? [],
       currentUser: meta.currentUser,
       gitlabConfigured: isGitlabConfigured(),
+      defaultGitlabBaseBranch: config.gitlab.defaultBase,
       geminiConfigured: Boolean(config.gemini.apiKey),
     });
   } catch (error) {
@@ -37,9 +39,25 @@ configRouter.get('/meta', async (_req, res) => {
       validTaskDomains: config.validTaskDomains ?? [],
       currentUser: null,
       gitlabConfigured: isGitlabConfigured(),
+      defaultGitlabBaseBranch: config.gitlab.defaultBase,
       geminiConfigured: Boolean(config.gemini.apiKey),
       warning: error instanceof Error ? error.message : 'Taiga metadata unavailable',
     });
+  }
+});
+
+configRouter.get('/gitlab/branches', async (req, res, next) => {
+  try {
+    if (!isGitlabConfigured()) {
+      res.status(400).json({ error: 'GitLab is not configured on the server' });
+      return;
+    }
+
+    const query = String(req.query.q ?? '').trim();
+    const branches = await gitlabService.searchBranches(query);
+    res.json(branches);
+  } catch (error) {
+    next(error);
   }
 });
 

@@ -13,7 +13,6 @@
     <nav class="tabs">
       <button type="button" [class.active]="activeTab === 'basico'" (click)="setTab('basico')">Basico</button>
       <button type="button" [class.active]="activeTab === 'detalhes'" (click)="setTab('detalhes')">Detalhes</button>
-      <button type="button" [class.active]="activeTab === 'gitlab'" (click)="setTab('gitlab')">GitLab</button>
     </nav>
   }
 
@@ -86,22 +85,71 @@
         </label>
 
         <div class="field field--branch">
-          <span>Branch planejada</span>
-          <div class="prefix-row">
-            @for (prefix of branchPrefixes; track prefix) {
-              <button
-                type="button"
-                class="prefix-btn"
-                [class.active]="selectedBranchPrefix === prefix"
-                (click)="setBranchPrefix(prefix)"
-              >
-                {{ prefix }}
-              </button>
-            }
-          </div>
-          <input formControlName="branch" [placeholder]="selectedBranchPrefix + '/minha-feature'" />
+          @if (meta?.gitlabConfigured) {
+            <small class="hint">Commits e diff da branch sao usados automaticamente na geracao.</small>
+            <div class="branch-existing-grid">
+              <label class="field">
+                <span>Branch</span>
+                <div class="autocomplete">
+                  <input
+                    formControlName="branch"
+                    placeholder="feat/minha-feature"
+                    (focus)="onBranchAutocompleteFocus('branch')"
+                    (input)="onBranchAutocompleteInput('branch')"
+                    (blur)="closeBranchSuggestions()"
+                  />
+                  @if (branchSuggestionsField === 'branch' && branchResults.length) {
+                    <div class="autocomplete-dropdown">
+                      @for (branch of branchResults; track branch) {
+                        <button type="button" class="result-item" (mousedown)="selectBranch(branch, 'branch')">
+                          {{ branch }}
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+              </label>
+              <label class="field">
+                <span>Comparar com</span>
+                <div class="autocomplete">
+                  <input
+                    formControlName="gitlabCompareBase"
+                    placeholder="develop"
+                    (focus)="onBranchAutocompleteFocus('compareBase')"
+                    (input)="onBranchAutocompleteInput('compareBase')"
+                    (blur)="closeBranchSuggestions()"
+                  />
+                  @if (branchSuggestionsField === 'compareBase' && branchResults.length) {
+                    <div class="autocomplete-dropdown">
+                      @for (branch of branchResults; track branch) {
+                        <button type="button" class="result-item" (mousedown)="selectBranch(branch, 'compareBase')">
+                          {{ branch }}
+                        </button>
+                      }
+                    </div>
+                  }
+                </div>
+              </label>
+            </div>
+          } @else {
+            <span>Branch planejada</span>
+            <div class="prefix-row">
+              @for (prefix of branchPrefixes; track prefix) {
+                <button
+                  type="button"
+                  class="prefix-btn"
+                  [class.active]="selectedBranchPrefix === prefix"
+                  (click)="setBranchPrefix(prefix)"
+                >
+                  {{ prefix }}
+                </button>
+              }
+            </div>
+            <input formControlName="branch" [placeholder]="selectedBranchPrefix + '/minha-feature'" />
+          }
+
           @if (form.controls.branch.touched && form.controls.branch.invalid) {
-            <small class="field-error">Informe a branch planejada</small>
+            <small class="field-error">Informe a branch</small>
           }
         </div>
       }
@@ -126,21 +174,6 @@
             placeholder="Uma por linha&#10;[Checkout] Adicionar QRcode ao pagamento"
           ></textarea>
         </label>
-      }
-
-      @if (activeTab === 'gitlab') {
-        @if (meta?.gitlabConfigured) {
-          <label class="toggle">
-            <input type="checkbox" formControlName="enrichWithGitlab" />
-            <span>Enriquecer com commits e diff da branch</span>
-          </label>
-          <label class="field">
-            <span>Branch GitLab</span>
-            <input formControlName="gitlabBranch" placeholder="feat/ad-search-chat" />
-          </label>
-        } @else {
-          <p class="empty">Configure GITLAB_TOKEN e GITLAB_PROJECT_ID no backend.</p>
-        }
       }
     }
   </div>

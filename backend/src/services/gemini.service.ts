@@ -11,6 +11,7 @@ import type { BranchContext } from './gitlab.service.js';
 import type { TaigaProjectMeta } from './taiga.service.js';
 import { buildSystemPrompt } from '../utils/template.js';
 import type { GenerateRequest } from '../schemas/draft.schema.js';
+import { defaultOpenStatusId, findDoneStatusId } from '../utils/task-status.js';
 
 const aiResponseSchema = {
   type: 'object',
@@ -44,6 +45,9 @@ const aiResponseSchema = {
         properties: {
           subject: { type: 'string' },
           description: { type: 'string' },
+          gitlabInformed: { type: 'boolean' },
+          branchComplete: { type: 'boolean' },
+          inferredFrom: { type: 'array', items: { type: 'string' } },
         },
         required: ['subject'],
       },
@@ -114,6 +118,13 @@ export class GeminiService {
     }
     if (branchContextText) {
       parts.push(`Contexto GitLab:\n${branchContextText}`);
+      parts.push(
+        `Para cada task, use o contexto GitLab e preencha:
+- gitlabInformed: true quando a task foi inferida ou validada com base nos commits/diffs da branch
+- branchComplete: true quando o trabalho da task ja aparece implementado no diff/commits
+- inferredFrom: ate 5 caminhos de arquivo ou SHAs de commit que sustentam a task
+Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=false.`,
+      );
     }
 
     parts.push(
@@ -180,9 +191,49 @@ export class GeminiService {
       ),
       tagColors: parsed.tagColors ?? {},
       tags: parsed.tags ?? [],
+      tasks: this.applyTaskBranchMetadata(parsed.tasks, meta, Boolean(branchContextText)),
     });
 
     return finalizeDraft(draft, escopo);
+  }
+
+  private applyTaskBranchMetadata(
+    tasks: Draft['tasks'],
+    meta: TaigaProjectMeta,
+    hasBranchContext: boolean,
+  ): Draft['tasks'] {
+    if (!hasBranchContext) {
+      return tasks.map((task) => ({
+        ...task,
+        gitlabInformed: false,
+        branchComplete: false,
+        inferredFrom: undefined,
+      }));
+    }
+
+    const doneId = findDoneStatusId(meta.taskStatuses);
+    const openId = defaultOpenStatusId(meta.taskStatuses);
+
+    return tasks.map((task) => {
+      const gitlabInformed = Boolean(task.gitlabInformed);
+      const branchComplete = Boolean(task.branchComplete);
+      const inferredFrom = task.inferredFrom?.filter(Boolean).slice(0, 5);
+
+      let statusId = task.statusId;
+      if (branchComplete && doneId) {
+        statusId = doneId;
+      } else if (gitlabInformed && openId) {
+        statusId = openId;
+      }
+
+      return {
+        ...task,
+        gitlabInformed,
+        branchComplete,
+        inferredFrom: inferredFrom?.length ? inferredFrom : undefined,
+        statusId,
+      };
+    });
   }
 }
 
