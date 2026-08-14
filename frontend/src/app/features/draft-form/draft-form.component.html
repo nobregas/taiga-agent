@@ -1,0 +1,151 @@
+<form [formGroup]="form" (ngSubmit)="submit()" class="form-shell" [class.form-shell--existing]="isExistingUsMode">
+  <div class="mode-grid">
+    @for (mode of modes; track mode.value) {
+      <label class="mode-card" [class.active]="form.controls.mode.value === mode.value">
+        <input type="radio" formControlName="mode" [value]="mode.value" />
+        <strong>{{ mode.label }}</strong>
+        <small>{{ mode.hint }}</small>
+      </label>
+    }
+  </div>
+
+  @if (!isExistingUsMode) {
+    <nav class="tabs">
+      <button type="button" [class.active]="activeTab === 'basico'" (click)="setTab('basico')">Basico</button>
+      <button type="button" [class.active]="activeTab === 'detalhes'" (click)="setTab('detalhes')">Detalhes</button>
+      <button type="button" [class.active]="activeTab === 'gitlab'" (click)="setTab('gitlab')">GitLab</button>
+    </nav>
+  }
+
+  <div class="tab-panel">
+    @if (isExistingUsMode) {
+      <div class="us-header-row us-header-row--existing">
+        <label class="field field--ref">
+          <span>Ref</span>
+          <div class="ref-input">
+            <span class="ref-prefix">#</span>
+            <input
+              formControlName="existingUserStoryRef"
+              inputmode="numeric"
+              maxlength="8"
+              placeholder="123"
+            />
+          </div>
+        </label>
+        <label class="field field--titulo-autocomplete">
+          <span>Titulo da US</span>
+          <div class="autocomplete">
+            <input
+              formControlName="existingUserStoryTitle"
+              placeholder="Clique para buscar US..."
+              (focus)="onUsAutocompleteFocus()"
+              (input)="onUsAutocompleteInput()"
+              (blur)="closeUsSuggestions()"
+            />
+            @if (usSuggestionsOpen && searchResults.length) {
+              <div class="autocomplete-dropdown">
+                @for (us of searchResults; track us.id) {
+                  <button type="button" class="result-item" (mousedown)="selectUserStory(us)">
+                    #{{ us.ref }} — {{ us.subject }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </label>
+      </div>
+      @if (form.controls.existingUserStoryRef.touched && form.controls.existingUserStoryRef.invalid) {
+        <small class="field-error">Informe a ref numerica da US</small>
+      }
+    } @else {
+      @if (activeTab === 'basico') {
+        <div class="us-header-row">
+          <label class="field field--escopo">
+            <span>Escopo</span>
+            <input formControlName="escopo" list="scopes-list" placeholder="App" maxlength="24" />
+            <datalist id="scopes-list">
+              @for (scope of scopes; track scope) {
+                <option [value]="scope"></option>
+              }
+            </datalist>
+          </label>
+          <label class="field field--titulo">
+            <span>Titulo da US</span>
+            <input formControlName="titulo" placeholder="Compressao de video" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Contexto geral da US</span>
+          <small class="hint">Briefing amplo — a IA resume o estado atual do app na descricao final</small>
+          <textarea
+            formControlName="contextoGeral"
+            rows="5"
+            placeholder="Explique o cenario, motivacao, restricoes, o que precisa ser entregue..."
+          ></textarea>
+        </label>
+
+        <div class="field field--branch">
+          <span>Branch planejada</span>
+          <div class="prefix-row">
+            @for (prefix of branchPrefixes; track prefix) {
+              <button
+                type="button"
+                class="prefix-btn"
+                [class.active]="selectedBranchPrefix === prefix"
+                (click)="setBranchPrefix(prefix)"
+              >
+                {{ prefix }}
+              </button>
+            }
+          </div>
+          <input formControlName="branch" [placeholder]="selectedBranchPrefix + '/minha-feature'" />
+          @if (form.controls.branch.touched && form.controls.branch.invalid) {
+            <small class="field-error">Informe a branch planejada</small>
+          }
+        </div>
+      }
+
+      @if (activeTab === 'detalhes') {
+        <div class="grid-2 detalhes-top">
+          <label class="field">
+            <span>Objetivo (opcional)</span>
+            <textarea formControlName="objetivo" rows="3" placeholder="IA pode inferir"></textarea>
+          </label>
+          <label class="field">
+            <span>Criterios de aceite (opcional)</span>
+            <textarea formControlName="criteriosAceite" rows="3" placeholder="Vazio na maioria dos casos"></textarea>
+          </label>
+        </div>
+
+        <label class="field field--spaced-top">
+          <span>Tasks da call</span>
+          <textarea
+            formControlName="tasksFromCall"
+            rows="4"
+            placeholder="Uma por linha&#10;[Checkout] Adicionar QRcode ao pagamento"
+          ></textarea>
+        </label>
+      }
+
+      @if (activeTab === 'gitlab') {
+        @if (meta?.gitlabConfigured) {
+          <label class="toggle">
+            <input type="checkbox" formControlName="enrichWithGitlab" />
+            <span>Enriquecer com commits e diff da branch</span>
+          </label>
+          <label class="field">
+            <span>Branch GitLab</span>
+            <input formControlName="gitlabBranch" placeholder="feat/ad-search-chat" />
+          </label>
+        } @else {
+          <p class="empty">Configure GITLAB_TOKEN e GITLAB_PROJECT_ID no backend.</p>
+        }
+      }
+    }
+  </div>
+
+  <button type="submit" class="fab" [disabled]="loading || form.invalid">
+    {{ submitLabel }}
+  </button>
+</form>

@@ -1,0 +1,52 @@
+us:
+  subject_format: "[{escopo}] {titulo}"
+  description_template: |
+    (Contexto)
+    {contexto}
+
+    (Objetivo)
+    {objetivo}
+
+    (Critérios de Aceite)
+    {criterios_aceite}
+
+    (Branch)
+    {branch}
+  branch:
+    prefixes: ["feat", "fix", "test", "chore", "hotfix", "release", "docs", "refactor"]
+    default_prefix: "feat"
+  contexto_rules: |
+    O campo "contexto" na descricao da US deve ser ENXUTO (1-3 frases).
+    Descreve apenas o estado ATUAL do app/produto relacionado a esta US.
+    NAO copie o briefing/contexto geral que o usuario informou.
+tags:
+  structure:
+    aplicacao: ["app", "dashboard", "portal", "mobile"]
+    escopo: ["front", "back", "fullstack"]
+    tipo: ["feature", "fix", "teste", "refactor", "docs", "chore"]
+    dominio: ["pedido", "checkout", "pagamento", "carrinho", "catalogo", "usuario"]
+  rules: |
+    Gere tagPlan com exatamente 4 valores (aplicacao, escopo, tipo, dominio).
+    Use valores curtos, minusculos, sem espacos.
+    Se a tag nao existir no Taiga, defina tagColors com hex adequado a categoria.
+task:
+  language: obliqua
+  domain_examples: [Pedido, Checkout, Pagamento, Carrinho]
+  few_shot:
+    - "[Pedido] Atualizar detalhes do pedido para ter pagamento"
+    - "[Checkout] Adicionar QRcode a passo de pagamento"
+few_shot_example:
+  us:
+    subject: "[App] Compressao de video"
+    branch: feat/video-compression
+    contexto: "Atualmente os videos gravados no app nao sao comprimidos."
+  tagPlan:
+    aplicacao: app
+    escopo: front
+    tipo: feature
+    dominio: catalogo
+  tagColors:
+    app: "#2563EB"
+    front: "#525252"
+    feature: "#059669"
+    catalogo: "#D97706"

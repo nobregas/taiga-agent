@@ -1,0 +1,156 @@
+@if (form) {
+  <div class="review-shell">
+    <nav class="tabs">
+      <button type="button" [class.active]="activeTab === 'us'" (click)="setTab('us')">US</button>
+      <button type="button" [class.active]="activeTab === 'tasks'" (click)="setTab('tasks')">
+        Tasks ({{ tasks.length }})
+      </button>
+    </nav>
+
+    <form [formGroup]="form" class="tab-panel">
+      @if (activeTab === 'us') {
+        <div class="subject-banner">{{ computedSubject }}</div>
+
+        <div class="us-header-row">
+          <label class="field field--escopo">
+            <span>Escopo</span>
+            <input formControlName="escopo" maxlength="24" />
+          </label>
+          <label class="field field--titulo">
+            <span>Titulo</span>
+            <input formControlName="titulo" />
+          </label>
+        </div>
+
+        <div class="field">
+          <span>Status da US</span>
+          <div class="status-buttons">
+            @for (status of usStatuses; track status.id) {
+              <button
+                type="button"
+                class="status-btn"
+                [class.active]="form.controls['usStatusId'].value === status.id"
+                (click)="setUsStatus(status.id)"
+              >
+                {{ status.name }}
+              </button>
+            }
+          </div>
+        </div>
+
+        @if (sprints.length) {
+          <label class="field field--sprint">
+            <span>Sprint</span>
+            <select formControlName="milestoneId">
+              <option [ngValue]="null">Sem sprint</option>
+              @for (sprint of sprints; track sprint.id) {
+                <option [ngValue]="sprint.id">{{ sprint.name }}</option>
+              }
+            </select>
+          </label>
+        }
+
+        <label class="field">
+          <span>Descricao da US</span>
+          <small class="hint">Formato Taiga: (Contexto), (Objetivo), (Critérios de Aceite), (Branch)</small>
+          <textarea formControlName="usDescription" rows="12" class="descricao-us"></textarea>
+        </label>
+
+        <div class="field" formGroupName="tagPlan">
+          <span>Tags</span>
+          <div class="tag-plan-row">
+            @for (category of tagCategories; track category) {
+              <label class="tag-plan-item">
+                <span>{{ tagCategoryLabels[category] }}</span>
+                <div class="tag-input-row">
+                  <span class="color-dot" [style.background]="tagColor(category)"></span>
+                  <input [formControlName]="category" />
+                </div>
+              </label>
+            }
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Notas Git / PR</span>
+          <textarea formControlName="gitNotes" rows="2"></textarea>
+        </label>
+
+        @if (branchContext) {
+          <div class="gitlab-box">
+            <strong>GitLab — {{ branchContext.branch }}</strong>
+            <p>
+              {{ branchContext.stats.totalCommits }} commits ·
+              {{ branchContext.stats.filesChanged }} arquivos
+            </p>
+          </div>
+        }
+      }
+
+      @if (activeTab === 'tasks') {
+        <div class="tasks-toolbar">
+          <p>Prefixo por dominio: [Pedido], [Checkout], [Pagamento] — nunca o escopo da US</p>
+          <div class="tasks-toolbar-actions">
+            @if (doneStatusId) {
+              <button
+                type="button"
+                class="btn ghost sm toggle-all-done"
+                [class.active]="allTasksDone"
+                (click)="toggleAllTasksDone()"
+              >
+                {{ allTasksDone ? 'Marcar todas New' : 'Marcar todas Done' }}
+              </button>
+            }
+            <button type="button" class="btn ghost sm" (click)="addTask()">+ Task</button>
+          </div>
+        </div>
+
+        <div formArrayName="tasks" class="tasks-list">
+          @for (task of tasks.controls; track $index) {
+            <div class="task-card" [formGroupName]="$index">
+              <div class="task-head">
+                <strong>Task {{ $index + 1 }}</strong>
+                <button type="button" class="btn danger sm" (click)="removeTask($index)">Remover</button>
+              </div>
+              <input formControlName="subject" placeholder="[Checkout] Adicionar QRcode ao pagamento" />
+              <textarea formControlName="description" rows="2" placeholder="Detalhes opcionais"></textarea>
+              <div class="field">
+                <span>Status</span>
+                <div class="status-buttons">
+                  @for (status of openTaskStatusesList; track status.id) {
+                    <button
+                      type="button"
+                      class="status-btn sm"
+                      [class.active]="task.get('statusId')?.value === status.id"
+                      (click)="setTaskStatus($index, status.id)"
+                    >
+                      {{ status.name }}
+                    </button>
+                  }
+                  @if (doneStatusId) {
+                    <button
+                      type="button"
+                      class="status-btn sm done-toggle"
+                      [class.active]="isTaskDone($index)"
+                      (click)="toggleTaskDone($index)"
+                    >
+                      Done
+                    </button>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </form>
+
+    <div class="actions">
+      <button type="button" class="btn ghost" (click)="back.emit()">Voltar</button>
+      <button type="button" class="btn ghost" (click)="reset.emit()">Descartar</button>
+      <button type="button" class="btn primary" [disabled]="publishing" (click)="submit()">
+        {{ publishing ? 'Publicando...' : 'Publicar US + tasks' }}
+      </button>
+    </div>
+  </div>
+}

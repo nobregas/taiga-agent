@@ -1,0 +1,140 @@
+@if (form && publishResult) {
+  <div class="published-shell">
+    <div class="head-row">
+      <div>
+        <h3>{{ computedSubject }}</h3>
+        @if (publishResult.userStory.url) {
+          <a [href]="publishResult.userStory.url" target="_blank" rel="noopener">
+            Abrir US #{{ publishResult.userStory.ref }} no Taiga
+          </a>
+        }
+      </div>
+      <button type="button" class="btn ghost" (click)="reset.emit()">Nova US</button>
+    </div>
+
+    <form [formGroup]="form" class="published-form">
+      <div class="us-header-row">
+        <label class="field field--escopo">
+          <span>Escopo</span>
+          <input formControlName="escopo" maxlength="24" />
+        </label>
+        <label class="field field--titulo">
+          <span>Titulo</span>
+          <input formControlName="titulo" />
+        </label>
+      </div>
+
+      <div class="field">
+        <span>Status da US</span>
+        <div class="status-buttons">
+          @for (status of usStatuses; track status.id) {
+            <button
+              type="button"
+              class="status-btn"
+              [class.active]="form.controls['usStatusId'].value === status.id"
+              (click)="setUsStatus(status.id)"
+            >
+              {{ status.name }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (sprints.length) {
+        <label class="field field--sprint">
+          <span>Sprint</span>
+          <select formControlName="milestoneId">
+            <option [ngValue]="null">Sem sprint</option>
+            @for (sprint of sprints; track sprint.id) {
+              <option [ngValue]="sprint.id">{{ sprint.name }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label class="field">
+        <span>Descricao da US</span>
+        <textarea formControlName="usDescription" rows="12" class="descricao-us"></textarea>
+      </label>
+
+      <div class="field" formGroupName="tagPlan">
+        <span>Tags</span>
+        <div class="tag-plan-row">
+          @for (category of tagCategories; track category) {
+            <label class="tag-plan-item">
+              <span>{{ tagCategoryLabels[category] }}</span>
+              <div class="tag-input-row">
+                <span class="color-dot" [style.background]="tagColor(category)"></span>
+                <input [formControlName]="category" />
+              </div>
+            </label>
+          }
+        </div>
+      </div>
+
+      <div class="tasks-section" formArrayName="tasks">
+        <div class="tasks-head">
+          <strong>Tasks ({{ tasks.length }})</strong>
+          @if (doneStatusId) {
+            <button
+              type="button"
+              class="btn ghost sm toggle-all-done"
+              [class.active]="allTasksDone"
+              (click)="toggleAllTasksDone()"
+            >
+              {{ allTasksDone ? 'Marcar todas New' : 'Marcar todas Done' }}
+            </button>
+          }
+        </div>
+        @for (task of tasks.controls; track $index) {
+          <div class="task-card" [formGroupName]="$index">
+            <div class="task-head">
+              <strong>
+                @if (task.get('url')?.value) {
+                  <a [href]="task.get('url')?.value" target="_blank" rel="noopener">
+                    Task #{{ task.get('ref')?.value }}
+                  </a>
+                } @else {
+                  Task {{ $index + 1 }}
+                }
+              </strong>
+            </div>
+            <input formControlName="subject" />
+            <textarea formControlName="description" rows="2" placeholder="Detalhes"></textarea>
+            <div class="field">
+              <span>Status</span>
+              <div class="status-buttons">
+                @for (status of openTaskStatusesList; track status.id) {
+                  <button
+                    type="button"
+                    class="status-btn sm"
+                    [class.active]="task.get('statusId')?.value === status.id"
+                    (click)="setTaskStatus($index, status.id)"
+                  >
+                    {{ status.name }}
+                  </button>
+                }
+                @if (doneStatusId) {
+                  <button
+                    type="button"
+                    class="status-btn sm done-toggle"
+                    [class.active]="isTaskDone($index)"
+                    (click)="toggleTaskDone($index)"
+                  >
+                    Done
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    </form>
+
+    <div class="actions">
+      <button type="button" class="btn primary" [disabled]="saving" (click)="submit()">
+        {{ saving ? 'Salvando...' : 'Salvar alteracoes no Taiga' }}
+      </button>
+    </div>
+  </div>
+}
