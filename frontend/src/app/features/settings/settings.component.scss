@@ -1,0 +1,67 @@
+:host {
+  display: block;
+}
+
+.page {
+  max-width: 640px;
+}
+
+.page-head h2 {
+  margin: 0.25rem 0 0;
+}
+
+.page-head p,
+.muted {
+  color: var(--muted);
+}
+
+.back-link {
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.panel h3 {
+  margin: 0.75rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field span {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.field input {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.75rem;
+  background: var(--surface);
+}
+
+.primary {
+  margin-top: 0.5rem;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  background: var(--text);
+  color: var(--surface);
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

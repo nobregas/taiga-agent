@@ -1,0 +1,164 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <a routerLink="/" class="back-link">← Voltar</a>
+      <h2>Workspaces</h2>
+      <p>Projetos Taiga e repositorios GitLab vinculados</p>
+    </div>
+  </header>
+
+  @if (loading) {
+    <p class="muted">Carregando...</p>
+  } @else {
+    <div class="grid">
+      <section class="panel">
+        <h3>{{ editingWorkspaceId ? 'Editar workspace' : 'Novo workspace Taiga' }}</h3>
+        <form [formGroup]="workspaceForm" (ngSubmit)="saveWorkspace()" class="form-grid">
+          @if (taigaProjects.length) {
+            <label class="field">
+              <span>Projeto Taiga</span>
+              <select formControlName="taigaProjectId" (change)="onTaigaProjectChange($event)">
+                <option value="">Selecione...</option>
+                @for (project of taigaProjects; track project.id) {
+                  <option [value]="project.id">{{ project.name }} ({{ project.slug }})</option>
+                }
+              </select>
+            </label>
+          }
+          <label class="field">
+            <span>Nome</span>
+            <input formControlName="name" placeholder="Equipe Checkout" />
+          </label>
+          <label class="field">
+            <span>Project ID</span>
+            <input formControlName="taigaProjectId" inputmode="numeric" />
+          </label>
+          <label class="field">
+            <span>Slug</span>
+            <input formControlName="taigaProjectSlug" placeholder="meu-projeto" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary" [disabled]="savingWorkspace">
+              {{ workspaceSubmitLabel }}
+            </button>
+            @if (editingWorkspaceId) {
+              <button type="button" class="ghost" (click)="cancelWorkspaceEdit()">Cancelar</button>
+            }
+          </div>
+        </form>
+
+        <h3>Workspaces cadastrados</h3>
+        <div class="list">
+          @for (workspace of workspaces; track workspace.id) {
+            <article
+              class="list-item"
+              [class.active]="selectedWorkspaceId === workspace.id"
+              (click)="selectWorkspace(workspace.id)"
+            >
+              <div>
+                <strong>{{ workspace.name }}</strong>
+                <small>Projeto #{{ workspace.taigaProjectId }}</small>
+              </div>
+              <div class="actions">
+                @if (activeWorkspaceId === workspace.id) {
+                  <span class="badge">Ativo</span>
+                } @else {
+                  <button type="button" class="ghost" (click)="activateWorkspace(workspace.id, $event)">
+                    Ativar
+                  </button>
+                }
+                <button type="button" class="ghost" (click)="startEditWorkspace(workspace, $event)">
+                  Editar
+                </button>
+                <button type="button" class="ghost danger" (click)="deleteWorkspace(workspace.id, $event)">
+                  Excluir
+                </button>
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>{{ editingCodebaseId ? 'Editar repositorio' : 'Repositorios do workspace' }}</h3>
+        @if (!selectedWorkspaceId) {
+          <p class="muted">Selecione um workspace para gerenciar repositorios.</p>
+        } @else {
+          <form [formGroup]="codebaseForm" (ngSubmit)="saveCodebase()" class="form-grid codebase-form">
+            <label class="field">
+              <span>Nome do repositorio</span>
+              <input formControlName="name" placeholder="portal-web" />
+            </label>
+            <label class="field field--repo-url">
+              <span>URL da API GitLab</span>
+              <input
+                formControlName="gitlabUrl"
+                placeholder="https://gitlab.com/api/v4"
+                autocomplete="off"
+              />
+              <small class="hint">Endpoint da API do GitLab deste repositorio (nao o clone URL).</small>
+            </label>
+            <label class="field">
+              <span>GitLab token</span>
+              <input
+                type="password"
+                formControlName="gitlabToken"
+                [placeholder]="editingCodebaseId ? 'Deixe em branco para manter o token atual' : 'glpat-...'"
+              />
+            </label>
+            <label class="field">
+              <span>GitLab project ID</span>
+              <input formControlName="gitlabProjectId" placeholder="12345" />
+            </label>
+            <label class="field">
+              <span>Branch base</span>
+              <input formControlName="gitlabDefaultBase" placeholder="develop" />
+            </label>
+            <label class="field">
+              <span>Scopes (CSV)</span>
+              <input formControlName="validScopes" placeholder="App,Backend,Portal" />
+            </label>
+            <label class="field">
+              <span>Task domains (CSV)</span>
+              <input formControlName="validTaskDomains" placeholder="Pedido,Checkout,Pagamento" />
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" formControlName="isDefault" />
+              <span>Repositorio padrao</span>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="primary" [disabled]="savingCodebase">
+                {{ codebaseSubmitLabel }}
+              </button>
+              @if (editingCodebaseId) {
+                <button type="button" class="ghost" (click)="cancelCodebaseEdit()">Cancelar</button>
+              }
+            </div>
+          </form>
+
+          <div class="list">
+            @for (codebase of codebases; track codebase.id) {
+              <article class="list-item">
+                <div>
+                  <strong>{{ codebase.name }}</strong>
+                  <small>
+                    GitLab {{ codebase.gitlabProjectId || 'nao configurado' }} · base {{ codebase.gitlabDefaultBase }}
+                  </small>
+                </div>
+                <div class="actions">
+                  @if (codebase.isDefault) {
+                    <span class="badge">Padrao</span>
+                  } @else {
+                    <button type="button" class="ghost" (click)="setDefaultCodebase(codebase.id)">Tornar padrao</button>
+                  }
+                  <button type="button" class="ghost" (click)="startEditCodebase(codebase)">Editar</button>
+                  <button type="button" class="ghost danger" (click)="deleteCodebase(codebase.id)">Excluir</button>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+</section>

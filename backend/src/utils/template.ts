@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
-import { config } from '../config.js';
+import { runtimeConfig } from '../services/runtime-config.service.js';
 
 export interface UsTaskTemplate {
   us: {
@@ -43,10 +43,11 @@ export function loadTemplate(): UsTaskTemplate {
   return cachedTemplate;
 }
 
-export function buildSystemPrompt(existingTags: string[]): string {
+export function buildSystemPrompt(existingTags: string[], codebaseId?: number | null): string {
   const template = loadTemplate();
-  const domains = config.validTaskDomains?.length
-    ? config.validTaskDomains.join(', ')
+  const configuredDomains = runtimeConfig.getValidTaskDomains(codebaseId);
+  const domains = configuredDomains.length
+    ? configuredDomains.join(', ')
     : (template.task.domain_examples ?? ['Pedido', 'Checkout', 'Pagamento']).join(', ');
 
   const prefixes = template.us.branch.prefixes.join(', ');
@@ -56,7 +57,7 @@ export function buildSystemPrompt(existingTags: string[]): string {
 
   const existingTagsHint =
     existingTags.length > 0
-      ? `Tags ja cadastradas no Taiga (reutilize quando fizer sentido): ${existingTags.join(', ')}`
+      ? `PREFIRA tags ja cadastradas no projeto Taiga (mesmo nome): ${existingTags.join(', ')}. So crie uma tag nova se nenhuma existente servir.`
       : 'Projeto sem tags — crie tagPlan completo e defina tagColors para cada tag.';
 
   return `Voce e um assistente que gera User Stories e Tasks para o Taiga seguindo o padrao do time.
@@ -89,6 +90,7 @@ ${tagStructure}
 
 ${template.tags.rules ?? ''}
 ${existingTagsHint}
+- Reutilize a cor ja cadastrada no Taiga quando a tag existir
 - Se a tag nao existir no Taiga, inclua tagColors com hex por nome da tag (minusculo)
 - tags (array) deve listar as 4 tags na ordem: aplicacao, escopo, tipo, dominio
 

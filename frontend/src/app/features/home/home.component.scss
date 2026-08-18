@@ -1,0 +1,43 @@
+:host {
+  display: block;
+}
+
+.stage {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.5rem 1.25rem;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.main-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.main-head p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.alert.warn {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+
+.alert a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.stage {
+  min-height: 420px;
+}

@@ -71,6 +71,8 @@ export const draftSchema = z.object({
   mode: z.enum(['new_us', 'existing_us', 'retrospective']).optional(),
   existingUserStoryId: z.number().optional(),
   existingUserStoryRef: z.number().optional(),
+  codebaseId: z.number().optional(),
+  repositoryName: z.string().optional(),
 });
 
 export type Draft = z.infer<typeof draftSchema>;
@@ -93,6 +95,8 @@ export const generateRequestSchema = z
     gitlabCompareBase: z.string().optional(),
     existingUserStoryId: z.number().optional(),
     existingUserStoryRef: z.number().optional(),
+    codebaseId: z.number().optional(),
+    repositoryName: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.mode !== 'existing_us' && !data.contextoGeral?.trim()) {
@@ -140,9 +144,13 @@ export function buildUsSubject(escopo: string, titulo: string): string {
 }
 
 export function buildUsDescription(
-  draft: Pick<Draft, 'contexto' | 'objetivo' | 'criteriosAceite' | 'branch'>,
+  draft: Pick<Draft, 'contexto' | 'objetivo' | 'criteriosAceite' | 'branch' | 'repositoryName'>,
 ): string {
   const criterios = draft.criteriosAceite?.trim() ?? '';
+  const repositorySection = draft.repositoryName?.trim()
+    ? `\n\n(Repositório)\n${draft.repositoryName.trim()}`
+    : '';
+
   return `(Contexto)
 ${draft.contexto.trim()}
 
@@ -153,7 +161,7 @@ ${draft.objetivo.trim()}
 ${criterios}
 
 (Branch)
-${draft.branch.trim()}`;
+${draft.branch.trim()}${repositorySection}`;
 }
 
 export function validateUsDescription(description: string): boolean {

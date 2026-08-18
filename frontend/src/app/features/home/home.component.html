@@ -1,0 +1,56 @@
+<section class="stage">
+  <header class="main-head">
+    <div>
+      <h2>
+        @switch (step) {
+          @case ('create') { Nova geracao }
+          @case ('review') { Revisar draft }
+          @case ('done') { {{ draft?.mode === 'existing_us' ? 'Editar US' : 'Publicado' }} }
+        }
+      </h2>
+      <p>Revise sempre antes de enviar ao Taiga</p>
+    </div>
+  </header>
+
+  @if (metaWarning) {
+    <div class="alert warn">{{ metaWarning }}</div>
+  }
+
+  @if (meta && !meta.hasActiveWorkspace) {
+    <div class="alert warn">
+      Configure um workspace Taiga em <a routerLink="/workspaces">Workspaces</a> antes de gerar US.
+    </div>
+  }
+
+  @if (step === 'create') {
+    <app-draft-form
+      [meta]="meta"
+      [loading]="loading"
+      (generate)="onGenerate($event)"
+      (openExisting)="onOpenExisting($event)"
+    ></app-draft-form>
+  }
+
+  @if (step === 'review' && draft) {
+    <app-review-panel
+      [meta]="meta"
+      [draft]="draft"
+      [branchContext]="branchContext"
+      [publishing]="publishing"
+      (publish)="onPublish($event.mode, $event.draft)"
+      (reset)="onReset()"
+      (back)="onBack()"
+    ></app-review-panel>
+  }
+
+  @if (step === 'done' && draft && publishResult) {
+    <app-published-panel
+      [meta]="meta"
+      [draft]="draft"
+      [publishResult]="publishResult"
+      [saving]="savingPublished"
+      (save)="onSavePublished($event)"
+      (reset)="onReset()"
+    ></app-published-panel>
+  }
+</section>

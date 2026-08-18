@@ -9,8 +9,10 @@ import {
   TAG_CATEGORY_LABELS,
   TagCategory,
   buildUsDescription,
+  colorFromProject,
   defaultOpenStatusId,
   findDoneStatusId,
+  findExistingTag,
   findNewStatusId,
   flattenTagPlan,
   isDoneStatus,
@@ -38,6 +40,7 @@ export class PublishedPanelComponent implements OnChanges {
   form!: FormGroup;
   tagCategories = TAG_CATEGORIES;
   tagCategoryLabels = TAG_CATEGORY_LABELS;
+  tagColorOverrides: Record<string, string> = {};
 
   constructor(private readonly fb: FormBuilder) {}
 
@@ -77,6 +80,7 @@ export class PublishedPanelComponent implements OnChanges {
   }
 
   private buildForm(draft: Draft, result: PublishResponse): void {
+    this.tagColorOverrides = { ...(draft.tagColors ?? {}) };
     const defaultUsStatus = draft.usStatusId ?? result.userStory.statusId ?? defaultOpenStatusId(this.usStatuses);
     const description = result.userStory.description ?? buildUsDescription(draft);
     const isEditingExisting = draft.mode === 'existing_us';
@@ -111,10 +115,46 @@ export class PublishedPanelComponent implements OnChanges {
     });
   }
 
+  get existingProjectTags(): string[] {
+    return this.meta?.tags ?? [];
+  }
+
   tagColor(category: TagCategory): string {
     const plan = this.form.get('tagPlan')?.getRawValue();
     if (!plan) return '#737373';
-    return tagColorFor(plan, category, this.draft?.tagColors);
+    return tagColorFor(plan, category, this.tagColorOverrides, this.meta?.tagColors);
+  }
+
+  onTagNameChange(category: TagCategory): void {
+    const raw = String(this.form.get('tagPlan')?.get(category)?.value ?? '').trim();
+    const existingName = findExistingTag(raw, this.existingProjectTags);
+    if (existingName && existingName !== raw) {
+      this.form.get('tagPlan')?.get(category)?.setValue(existingName, { emitEvent: false });
+    }
+
+    const name = (existingName ?? raw).toLowerCase();
+    if (!name) {
+      return;
+    }
+
+    const existingColor = colorFromProject(name, this.meta?.tagColors);
+    if (existingColor && !this.tagColorOverrides[name]) {
+      this.tagColorOverrides = { ...this.tagColorOverrides, [name]: existingColor };
+    }
+  }
+
+  onTagColorChange(category: TagCategory, event: Event): void {
+    const name = String(this.form.get('tagPlan')?.get(category)?.value ?? '')
+      .trim()
+      .toLowerCase();
+    if (!name) {
+      return;
+    }
+
+    this.tagColorOverrides = {
+      ...this.tagColorOverrides,
+      [name]: (event.target as HTMLInputElement).value,
+    };
   }
 
   setUsStatus(statusId: number): void {
@@ -185,6 +225,7 @@ export class PublishedPanelComponent implements OnChanges {
       criteriosAceite: parsed.criteriosAceite,
       branch: parsed.branch || this.draft?.branch || '',
       tagPlan,
+      tagColors: this.tagColorOverrides,
       tags: flattenTagPlan(tagPlan),
       usStatusId: value.usStatusId,
       milestoneId: value.milestoneId,

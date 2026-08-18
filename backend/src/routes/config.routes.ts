@@ -1,16 +1,28 @@
 import { Router } from 'express';
-import { config, isGitlabConfigured } from '../config.js';
+import { codebaseRepository } from '../repositories/codebase.repository.js';
 import { buildDraftFromUserStory } from '../utils/us.mapper.js';
 import { gitlabService } from '../services/gitlab.service.js';
+import { runtimeConfig } from '../services/runtime-config.service.js';
 import { taigaService } from '../services/taiga.service.js';
 
 export const configRouter = Router();
 
 configRouter.get('/meta', async (_req, res) => {
+  const workspace = runtimeConfig.getActiveWorkspace();
+  const settings = runtimeConfig.getSettings();
+  const codebases = workspace
+    ? codebaseRepository.listByWorkspace(workspace.id).map((item) => codebaseRepository.toPublic(item))
+    : [];
+  const defaultCodebase = workspace ? runtimeConfig.resolveCodebase(null) : null;
+  const defaultCodebaseId = defaultCodebase?.id ?? workspace?.defaultCodebaseId ?? null;
+
   try {
+    runtimeConfig.assertTaigaConfigured();
     const meta = await taigaService.getProjectMeta();
     res.json({
-      projectId: config.taiga.projectId,
+      workspaceId: workspace?.id ?? null,
+      workspaceName: workspace?.name ?? null,
+      projectId: workspace?.taigaProjectId ?? null,
       projectSlug: meta.projectSlug,
       tags: meta.tags,
       tagColors: meta.tagColors,
@@ -18,43 +30,75 @@ configRouter.get('/meta', async (_req, res) => {
       taskStatuses: meta.taskStatuses,
       sprints: meta.sprints,
       defaultSprintId: meta.defaultSprintId,
-      validScopes: config.validScopes ?? [],
-      validTaskDomains: config.validTaskDomains ?? [],
+      validScopes: runtimeConfig.getValidScopes(defaultCodebaseId),
+      validTaskDomains: runtimeConfig.getValidTaskDomains(defaultCodebaseId),
       currentUser: meta.currentUser,
-      gitlabConfigured: isGitlabConfigured(),
-      defaultGitlabBaseBranch: config.gitlab.defaultBase,
-      geminiConfigured: Boolean(config.gemini.apiKey),
+      codebases,
+      defaultCodebaseId,
+      gitlabConfigured: runtimeConfig.isGitlabConfigured(defaultCodebaseId),
+      defaultGitlabBaseBranch: runtimeConfig.getGitlabConfig(defaultCodebaseId).defaultBase,
+      geminiConfigured: Boolean(settings.geminiApiKey),
+      settingsConfigured: Boolean(
+        settings.geminiApiKey && (settings.taigaToken || (settings.taigaUsername && settings.taigaPassword)),
+      ),
+      hasActiveWorkspace: Boolean(workspace),
+      hasDefaultCodebase: Boolean(defaultCodebase),
     });
   } catch (error) {
     res.json({
-      projectId: config.taiga.projectId ?? null,
-      projectSlug: config.taiga.projectSlug ?? 'unknown',
+      workspaceId: workspace?.id ?? null,
+      workspaceName: workspace?.name ?? null,
+      projectId: workspace?.taigaProjectId ?? null,
+      projectSlug: workspace?.taigaProjectSlug ?? 'unknown',
       tags: [],
       tagColors: {},
       userStoryStatuses: [],
       taskStatuses: [],
       sprints: [],
       defaultSprintId: null,
-      validScopes: config.validScopes ?? [],
-      validTaskDomains: config.validTaskDomains ?? [],
+      validScopes: runtimeConfig.getValidScopes(defaultCodebaseId),
+      validTaskDomains: runtimeConfig.getValidTaskDomains(defaultCodebaseId),
       currentUser: null,
-      gitlabConfigured: isGitlabConfigured(),
-      defaultGitlabBaseBranch: config.gitlab.defaultBase,
-      geminiConfigured: Boolean(config.gemini.apiKey),
+      codebases,
+      defaultCodebaseId,
+      gitlabConfigured: runtimeConfig.isGitlabConfigured(defaultCodebaseId),
+      defaultGitlabBaseBranch: runtimeConfig.getGitlabConfig(defaultCodebaseId).defaultBase,
+      geminiConfigured: Boolean(settings.geminiApiKey),
+      settingsConfigured: Boolean(
+        settings.geminiApiKey && (settings.taigaToken || (settings.taigaUsername && settings.taigaPassword)),
+      ),
+      hasActiveWorkspace: Boolean(workspace),
+      hasDefaultCodebase: Boolean(defaultCodebase),
       warning: error instanceof Error ? error.message : 'Taiga metadata unavailable',
     });
   }
 });
 
+configRouter.get('/tags', async (_req, res, next) => {
+  try {
+    runtimeConfig.assertTaigaConfigured();
+    const meta = await taigaService.getProjectMeta();
+    res.json({
+      tags: meta.tags,
+      tagColors: meta.tagColors,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 configRouter.get('/gitlab/branches', async (req, res, next) => {
   try {
-    if (!isGitlabConfigured()) {
-      res.status(400).json({ error: 'GitLab is not configured on the server' });
+    const codebaseId = req.query.codebaseId ? Number.parseInt(String(req.query.codebaseId), 10) : null;
+    const gitlab = runtimeConfig.getGitlabConfig(codebaseId);
+
+    if (!runtimeConfig.isGitlabConfigured(codebaseId)) {
+      res.status(400).json({ error: 'GitLab is not configured for this repository' });
       return;
     }
 
     const query = String(req.query.q ?? '').trim();
-    const branches = await gitlabService.searchBranches(query);
+    const branches = await gitlabService.searchBranches(gitlab, query);
     res.json(branches);
   } catch (error) {
     next(error);
@@ -63,6 +107,7 @@ configRouter.get('/gitlab/branches', async (req, res, next) => {
 
 configRouter.get('/userstories/search', async (req, res, next) => {
   try {
+    runtimeConfig.assertTaigaConfigured();
     const query = String(req.query.q ?? '').trim();
     const results = query
       ? await taigaService.searchUserStories(query)
@@ -82,6 +127,7 @@ configRouter.get('/userstories/search', async (req, res, next) => {
 
 configRouter.get('/userstories/recent', async (_req, res, next) => {
   try {
+    runtimeConfig.assertTaigaConfigured();
     const results = await taigaService.listRecentUserStories(20);
     res.json(
       results.map((us) => ({
@@ -97,6 +143,7 @@ configRouter.get('/userstories/recent', async (_req, res, next) => {
 
 configRouter.get('/userstories/:ref/edit', async (req, res, next) => {
   try {
+    runtimeConfig.assertTaigaConfigured();
     const ref = Number.parseInt(req.params.ref, 10);
     if (!Number.isFinite(ref)) {
       res.status(400).json({ error: 'Ref invalida' });
@@ -142,6 +189,7 @@ configRouter.get('/userstories/:ref/edit', async (req, res, next) => {
 
 configRouter.get('/userstories/:ref', async (req, res, next) => {
   try {
+    runtimeConfig.assertTaigaConfigured();
     const ref = Number.parseInt(req.params.ref, 10);
     const userStory = await taigaService.findUserStoryByRef(ref);
     res.json({

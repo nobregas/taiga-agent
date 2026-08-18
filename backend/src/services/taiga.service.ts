@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import { runtimeConfig } from './runtime-config.service.js';
 import type { TaigaMilestone } from '../utils/sprints.js';
 import { pickDefaultSprintId } from '../utils/sprints.js';
 
@@ -49,13 +49,29 @@ export interface TaigaProjectMeta {
   currentUser: TaigaUser | null;
 }
 
+export interface TaigaProjectSummary {
+  id: number;
+  name: string;
+  slug: string;
+}
+
 export class TaigaService {
-  private authToken: string | null = config.taiga.token ?? null;
+  private authToken: string | null = null;
   private currentUser: TaigaUser | null = null;
+
+  invalidateAuth(): void {
+    this.authToken = null;
+    this.currentUser = null;
+  }
+
+  private getConfig() {
+    return runtimeConfig.getTaigaConfig();
+  }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const token = await this.getToken();
-    const response = await fetch(`${config.taiga.url}${path}`, {
+    const { url } = this.getConfig();
+    const response = await fetch(`${url}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -82,21 +98,28 @@ export class TaigaService {
   }
 
   async getToken(): Promise<string> {
+    const taiga = this.getConfig();
+
+    if (taiga.token) {
+      this.authToken = taiga.token;
+      return taiga.token;
+    }
+
     if (this.authToken) {
       return this.authToken;
     }
 
-    if (!config.taiga.username || !config.taiga.password) {
+    if (!taiga.username || !taiga.password) {
       throw new Error('Taiga credentials are not configured');
     }
 
-    const data = await fetch(`${config.taiga.url}/auth`, {
+    const data = await fetch(`${taiga.url}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'normal',
-        username: config.taiga.username,
-        password: config.taiga.password,
+        username: taiga.username,
+        password: taiga.password,
       }),
     });
 
@@ -130,17 +153,28 @@ export class TaigaService {
     return this.currentUser;
   }
 
-  async getProjectMeta(projectId = config.taiga.projectId): Promise<TaigaProjectMeta> {
-    if (!projectId) {
+  async listProjects(): Promise<TaigaProjectSummary[]> {
+    runtimeConfig.assertTaigaCredentials();
+    const projects = await this.request<Array<{ id: number; name: string; slug: string }>>('/projects');
+    return projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+    }));
+  }
+
+  async getProjectMeta(projectId?: number | null): Promise<TaigaProjectMeta> {
+    const resolvedProjectId = projectId ?? this.getConfig().projectId;
+    if (!resolvedProjectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
 
     const [project, tagColors, usStatuses, taskStatuses, milestones] = await Promise.all([
-      this.request<{ id: number; slug: string }>(`/projects/${projectId}`),
-      this.request<Record<string, string | null>>(`/projects/${projectId}/tags_colors`),
-      this.request<TaigaStatus[]>(`/userstory-statuses?project=${projectId}`),
-      this.request<TaigaStatus[]>(`/task-statuses?project=${projectId}`),
-      this.request<TaigaMilestone[]>(`/milestones?project=${projectId}`),
+      this.request<{ id: number; slug: string }>(`/projects/${resolvedProjectId}`),
+      this.request<Record<string, string | null>>(`/projects/${resolvedProjectId}/tags_colors`),
+      this.request<TaigaStatus[]>(`/userstory-statuses?project=${resolvedProjectId}`),
+      this.request<TaigaStatus[]>(`/task-statuses?project=${resolvedProjectId}`),
+      this.request<TaigaMilestone[]>(`/milestones?project=${resolvedProjectId}`),
     ]);
 
     let currentUser: TaigaUser | null = null;
@@ -162,39 +196,43 @@ export class TaigaService {
     };
   }
 
-  async findUserStoryByRef(ref: number, projectId = config.taiga.projectId): Promise<TaigaUserStory> {
-    if (!projectId) {
+  async findUserStoryByRef(ref: number, projectId?: number | null): Promise<TaigaUserStory> {
+    const resolvedProjectId = projectId ?? this.getConfig().projectId;
+    if (!resolvedProjectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
 
-    return this.request<TaigaUserStory>(`/userstories/by_ref?ref=${ref}&project=${projectId}`);
+    return this.request<TaigaUserStory>(`/userstories/by_ref?ref=${ref}&project=${resolvedProjectId}`);
   }
 
-  async searchUserStories(query: string, projectId = config.taiga.projectId): Promise<TaigaUserStory[]> {
-    if (!projectId) {
+  async searchUserStories(query: string, projectId?: number | null): Promise<TaigaUserStory[]> {
+    const resolvedProjectId = projectId ?? this.getConfig().projectId;
+    if (!resolvedProjectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
 
     return this.request<TaigaUserStory[]>(
-      `/userstories?project=${projectId}&subject=${encodeURIComponent(query)}`,
+      `/userstories?project=${resolvedProjectId}&subject=${encodeURIComponent(query)}`,
     );
   }
 
-  async listRecentUserStories(limit = 20, projectId = config.taiga.projectId): Promise<TaigaUserStory[]> {
-    if (!projectId) {
+  async listRecentUserStories(limit = 20, projectId?: number | null): Promise<TaigaUserStory[]> {
+    const resolvedProjectId = projectId ?? this.getConfig().projectId;
+    if (!resolvedProjectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
 
-    const stories = await this.request<TaigaUserStory[]>(`/userstories?project=${projectId}&order_by=-ref`);
+    const stories = await this.request<TaigaUserStory[]>(`/userstories?project=${resolvedProjectId}&order_by=-ref`);
     return stories.slice(0, limit);
   }
 
-  async getTasksByUserStory(userStoryId: number, projectId = config.taiga.projectId): Promise<TaigaTask[]> {
-    if (!projectId) {
+  async getTasksByUserStory(userStoryId: number, projectId?: number | null): Promise<TaigaTask[]> {
+    const resolvedProjectId = projectId ?? this.getConfig().projectId;
+    if (!resolvedProjectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
 
-    return this.request<TaigaTask[]>(`/tasks?user_story=${userStoryId}&project=${projectId}`);
+    return this.request<TaigaTask[]>(`/tasks?user_story=${userStoryId}&project=${resolvedProjectId}`);
   }
 
   async createUserStory(input: {
@@ -206,7 +244,7 @@ export class TaigaService {
     projectId?: number;
     assignedTo?: number;
   }): Promise<TaigaUserStory> {
-    const projectId = input.projectId ?? config.taiga.projectId;
+    const projectId = input.projectId ?? this.getConfig().projectId;
     if (!projectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
@@ -237,7 +275,7 @@ export class TaigaService {
     statusId?: number;
     assignedTo?: number;
   }): Promise<TaigaTask> {
-    const projectId = input.projectId ?? config.taiga.projectId;
+    const projectId = input.projectId ?? this.getConfig().projectId;
     if (!projectId) {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
@@ -292,6 +330,13 @@ export class TaigaService {
     });
   }
 
+  async editTag(projectId: number, fromTag: string, toTag: string, color: string): Promise<void> {
+    await this.request<void>(`/projects/${projectId}/edit_tag`, {
+      method: 'POST',
+      body: JSON.stringify({ from_tag: fromTag, to_tag: toTag, color }),
+    });
+  }
+
   async ensureTags(
     projectId: number,
     tags: Array<{ name: string; color: string }>,
@@ -305,6 +350,16 @@ export class TaigaService {
       );
 
       if (existing) {
+        const currentColor = (existingTagColors[existing] ?? '').toLowerCase();
+        const nextColor = tag.color.toLowerCase();
+        if (tag.color && currentColor && currentColor !== nextColor) {
+          try {
+            await this.editTag(projectId, existing, existing, tag.color);
+            existingTagColors[existing] = tag.color;
+          } catch {
+            /* keep the existing project color if Taiga rejects the edit */
+          }
+        }
         ensured.push(existing);
         continue;
       }

@@ -146,11 +146,22 @@ textarea:focus {
   min-width: 4.25rem;
 }
 
-.tag-input-row input {
-  width: 5.5rem;
-  max-width: 5.5rem;
+.tag-input-row input:not([type='color']) {
+  width: 7.5rem;
+  max-width: 7.5rem;
   padding: 0.32rem 0.45rem;
   font-size: 0.75rem;
+}
+
+.color-picker {
+  width: 1.85rem;
+  height: 1.85rem;
+  max-width: 1.85rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
 }
 
 .field--inline-ref input {

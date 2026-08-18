@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  BranchContextPreview,
   Draft,
   GenerateRequest,
   GenerateResponse,
@@ -11,6 +12,17 @@ import {
   UserStoryEditResponse,
   UserStorySearchResult,
 } from '../models/draft.models';
+import {
+  AppSettings,
+  Codebase,
+  CreateCodebaseRequest,
+  CreateWorkspaceRequest,
+  TaigaProjectOption,
+  UpdateCodebaseRequest,
+  UpdateSettingsRequest,
+  UpdateWorkspaceRequest,
+  Workspace,
+} from '../models/settings.models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -31,10 +43,13 @@ export class ApiService {
     });
   }
 
-  searchGitlabBranches(query = ''): Observable<string[]> {
-    return this.http.get<string[]>(`${this.baseUrl}/config/gitlab/branches`, {
-      params: { q: query },
-    });
+  searchGitlabBranches(query = '', codebaseId?: number | null): Observable<string[]> {
+    const params: Record<string, string> = { q: query };
+    if (codebaseId) {
+      params['codebaseId'] = String(codebaseId);
+    }
+
+    return this.http.get<string[]>(`${this.baseUrl}/config/gitlab/branches`, { params });
   }
 
   listRecentUserStories(): Observable<UserStorySearchResult[]> {
@@ -55,5 +70,63 @@ export class ApiService {
 
   updatePublished(payload: UpdatePublishedRequest): Observable<PublishResponse> {
     return this.http.patch<PublishResponse>(`${this.baseUrl}/publish/update`, payload);
+  }
+
+  getSettings(): Observable<AppSettings> {
+    return this.http.get<AppSettings>(`${this.baseUrl}/settings`);
+  }
+
+  updateSettings(payload: UpdateSettingsRequest): Observable<AppSettings> {
+    return this.http.put<AppSettings>(`${this.baseUrl}/settings`, payload);
+  }
+
+  listTaigaProjects(): Observable<TaigaProjectOption[]> {
+    return this.http.get<TaigaProjectOption[]>(`${this.baseUrl}/settings/taiga/projects`);
+  }
+
+  listProjectTags(): Observable<{ tags: string[]; tagColors: Record<string, string | null> }> {
+    return this.http.get<{ tags: string[]; tagColors: Record<string, string | null> }>(
+      `${this.baseUrl}/config/tags`,
+    );
+  }
+
+  listWorkspaces(): Observable<Workspace[]> {
+    return this.http.get<Workspace[]>(`${this.baseUrl}/workspaces`);
+  }
+
+  createWorkspace(payload: CreateWorkspaceRequest): Observable<Workspace> {
+    return this.http.post<Workspace>(`${this.baseUrl}/workspaces`, payload);
+  }
+
+  updateWorkspace(id: number, payload: UpdateWorkspaceRequest): Observable<Workspace> {
+    return this.http.patch<Workspace>(`${this.baseUrl}/workspaces/${id}`, payload);
+  }
+
+  deleteWorkspace(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/workspaces/${id}`);
+  }
+
+  activateWorkspace(id: number): Observable<Workspace> {
+    return this.http.post<Workspace>(`${this.baseUrl}/workspaces/${id}/activate`, {});
+  }
+
+  listCodebases(workspaceId: number): Observable<Codebase[]> {
+    return this.http.get<Codebase[]>(`${this.baseUrl}/workspaces/${workspaceId}/codebases`);
+  }
+
+  createCodebase(workspaceId: number, payload: CreateCodebaseRequest): Observable<Codebase> {
+    return this.http.post<Codebase>(`${this.baseUrl}/workspaces/${workspaceId}/codebases`, payload);
+  }
+
+  updateCodebase(id: number, payload: UpdateCodebaseRequest): Observable<Codebase> {
+    return this.http.patch<Codebase>(`${this.baseUrl}/codebases/${id}`, payload);
+  }
+
+  deleteCodebase(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/codebases/${id}`);
+  }
+
+  setDefaultCodebase(id: number): Observable<Codebase> {
+    return this.http.post<Codebase>(`${this.baseUrl}/codebases/${id}/set-default`, {});
   }
 }

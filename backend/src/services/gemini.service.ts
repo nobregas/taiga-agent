@@ -1,5 +1,4 @@
 import { GoogleGenAI } from '@google/genai';
-import { assertGeminiConfigured, config } from '../config.js';
 import type { Draft } from '../schemas/draft.schema.js';
 import {
   draftSchema,
@@ -12,6 +11,8 @@ import type { TaigaProjectMeta } from './taiga.service.js';
 import { buildSystemPrompt } from '../utils/template.js';
 import type { GenerateRequest } from '../schemas/draft.schema.js';
 import { defaultOpenStatusId, findDoneStatusId } from '../utils/task-status.js';
+import { mergeTagColors, preferExistingTagNames } from '../utils/tags.js';
+import { runtimeConfig } from './runtime-config.service.js';
 
 const aiResponseSchema = {
   type: 'object',
@@ -69,12 +70,22 @@ const aiResponseSchema = {
 
 export class GeminiService {
   private client: GoogleGenAI | null = null;
+  private clientApiKey: string | null = null;
+
+  invalidateClient(): void {
+    this.client = null;
+    this.clientApiKey = null;
+  }
 
   private getClient(): GoogleGenAI {
-    assertGeminiConfigured();
-    if (!this.client) {
-      this.client = new GoogleGenAI({ apiKey: config.gemini.apiKey! });
+    runtimeConfig.assertGeminiConfigured();
+    const { apiKey, model: _model } = runtimeConfig.getGeminiConfig();
+
+    if (!this.client || this.clientApiKey !== apiKey) {
+      this.client = new GoogleGenAI({ apiKey: apiKey! });
+      this.clientApiKey = apiKey;
     }
+
     return this.client;
   }
 
@@ -127,9 +138,17 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       );
     }
 
+    const tagColorsHint = Object.entries(meta.tagColors)
+      .filter(([, color]) => Boolean(color))
+      .map(([name, color]) => `${name}=${color}`)
+      .join(', ');
+
     parts.push(
-      `Tags existentes no Taiga: ${meta.tags.join(', ') || 'nenhuma — gere tagPlan e tagColors'}`,
+      `Tags existentes no projeto Taiga (PREFIRA reutilizar nome e cor): ${meta.tags.join(', ') || 'nenhuma'}`,
     );
+    if (tagColorsHint) {
+      parts.push(`Cores atuais das tags do projeto: ${tagColorsHint}`);
+    }
     parts.push(
       `Prefixo de branch preferido pelo usuario: ${prefix} (pode mudar se fix/test/chore/hotfix for mais adequado)`,
     );
@@ -152,15 +171,18 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
     meta: TaigaProjectMeta,
     _branchContext?: BranchContext,
     branchContextText?: string,
+    codebaseId?: number | null,
   ): Promise<Draft> {
     const client = this.getClient();
     const prefix = request.branchPrefix ?? 'feat';
+    const gemini = runtimeConfig.getGeminiConfig();
+    const codebase = runtimeConfig.resolveCodebase(codebaseId ?? request.codebaseId);
 
     const response = await client.models.generateContent({
-      model: config.gemini.model,
+      model: gemini.model,
       contents: this.buildUserPrompt(request, meta, branchContextText),
       config: {
-        systemInstruction: buildSystemPrompt(meta.tags),
+        systemInstruction: buildSystemPrompt(meta.tags, codebaseId ?? request.codebaseId),
         responseMimeType: 'application/json',
         responseSchema: aiResponseSchema,
         temperature: 0.4,
@@ -175,6 +197,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
     const parsed = JSON.parse(text) as Draft;
     const escopo = parsed.escopo || request.escopo || 'App';
     const titulo = parsed.titulo || request.titulo || 'Nova user story';
+    const tagPlan = preferExistingTagNames(parsed.tagPlan, meta.tags);
 
     const draft = draftSchema.parse({
       ...parsed,
@@ -184,12 +207,15 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       mode: request.mode,
       existingUserStoryId: request.existingUserStoryId,
       existingUserStoryRef: request.existingUserStoryRef,
+      codebaseId: codebase?.id ?? codebaseId ?? request.codebaseId,
+      repositoryName: codebase?.name ?? request.repositoryName,
       criteriosAceite: parsed.criteriosAceite ?? null,
       branch: normalizeBranch(
         parsed.branch || request.branch || `${prefix}/${slugifyBranch(titulo)}`,
         prefix,
       ),
-      tagColors: parsed.tagColors ?? {},
+      tagPlan,
+      tagColors: mergeTagColors(tagPlan, parsed.tagColors, meta.tagColors),
       tags: parsed.tags ?? [],
       tasks: this.applyTaskBranchMetadata(parsed.tasks, meta, Boolean(branchContextText)),
     });

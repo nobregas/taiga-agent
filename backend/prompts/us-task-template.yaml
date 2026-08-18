@@ -28,6 +28,7 @@ tags:
   rules: |
     Gere tagPlan com exatamente 4 valores (aplicacao, escopo, tipo, dominio).
     Use valores curtos, minusculos, sem espacos.
+    Prefira tags ja existentes no projeto Taiga (mesmo nome e cor).
     Se a tag nao existir no Taiga, defina tagColors com hex adequado a categoria.
 task:
   language: obliqua

@@ -23,7 +23,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly branchSearch$ = new Subject<string>();
+  private readonly branchSearch$ = new Subject<{ query: string; codebaseId?: number | null }>();
   private readonly usSearch$ = new Subject<string>();
 
   @Input() meta: ProjectMeta | null = null;
@@ -42,11 +42,11 @@ export class DraftFormComponent implements OnInit, OnChanges {
   readonly modes: Array<{ value: GenerationMode; label: string; hint: string }> = [
     { value: 'new_us', label: 'Nova US', hint: 'Planejamento antes de codar' },
     { value: 'existing_us', label: 'US existente', hint: 'Editar US aberta no Taiga' },
-    { value: 'retrospective', label: 'Retrospectiva', hint: 'Branch com commits' },
   ];
 
   form = this.fb.nonNullable.group({
     mode: ['new_us' as GenerationMode, Validators.required],
+    codebaseId: [null as number | null],
     escopo: ['', Validators.required],
     titulo: ['', Validators.required],
     contextoGeral: ['', Validators.required],
@@ -64,12 +64,16 @@ export class DraftFormComponent implements OnInit, OnChanges {
   ngOnInit(): void {
     this.applyModeValidators(this.form.controls.mode.value);
     this.form.controls.mode.valueChanges.subscribe((mode) => this.applyModeValidators(mode));
+    this.form.controls.codebaseId.valueChanges.subscribe(() => {
+      this.branchResults = [];
+      this.applyCodebaseDefaults();
+    });
 
     this.branchSearch$
       .pipe(
         debounceTime(300),
-        distinctUntilChanged(),
-        switchMap((query) => this.api.searchGitlabBranches(query)),
+        distinctUntilChanged((a, b) => a.query === b.query && a.codebaseId === b.codebaseId),
+        switchMap(({ query, codebaseId }) => this.api.searchGitlabBranches(query, codebaseId)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((results) => {
@@ -89,12 +93,20 @@ export class DraftFormComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['meta'] && this.meta?.defaultGitlabBaseBranch && !this.metaDefaultsApplied) {
-      this.form.patchValue(
-        { gitlabCompareBase: this.meta.defaultGitlabBaseBranch },
-        { emitEvent: false },
-      );
-      this.metaDefaultsApplied = true;
+    if (changes['meta'] && this.meta) {
+      const workspaceChanged =
+        changes['meta'].previousValue?.workspaceId !== changes['meta'].currentValue?.workspaceId;
+
+      if (!this.metaDefaultsApplied || workspaceChanged) {
+        this.form.patchValue(
+          {
+            codebaseId: this.meta.defaultCodebaseId,
+            gitlabCompareBase: this.meta.defaultGitlabBaseBranch ?? 'develop',
+          },
+          { emitEvent: false },
+        );
+        this.metaDefaultsApplied = true;
+      }
     }
   }
 
@@ -102,7 +114,16 @@ export class DraftFormComponent implements OnInit, OnChanges {
     return this.form.controls.mode.value === 'existing_us';
   }
 
+  get selectedCodebase() {
+    const codebaseId = this.form.controls.codebaseId.value;
+    return this.meta?.codebases.find((item) => item.id === codebaseId) ?? null;
+  }
+
   get gitlabConfigured(): boolean {
+    const codebase = this.selectedCodebase;
+    if (codebase) {
+      return Boolean(codebase.hasGitlabToken && codebase.gitlabProjectId);
+    }
     return Boolean(this.meta?.gitlabConfigured);
   }
 
@@ -113,8 +134,15 @@ export class DraftFormComponent implements OnInit, OnChanges {
     return this.isExistingUsMode ? 'Abrir US' : 'Gerar draft';
   }
 
+  private applyCodebaseDefaults(): void {
+    const codebase = this.selectedCodebase;
+    if (codebase?.gitlabDefaultBase) {
+      this.form.patchValue({ gitlabCompareBase: codebase.gitlabDefaultBase }, { emitEvent: false });
+    }
+  }
+
   private applyModeValidators(mode: GenerationMode): void {
-    if (mode === 'existing_us' || mode === 'retrospective') {
+    if (mode === 'existing_us') {
       this.form.controls.escopo.clearValidators();
       this.form.controls.titulo.clearValidators();
       this.form.controls.contextoGeral.clearValidators();
@@ -143,6 +171,11 @@ export class DraftFormComponent implements OnInit, OnChanges {
   }
 
   get scopes(): string[] {
+    const codebaseScopes = this.selectedCodebase?.validScopes;
+    if (codebaseScopes?.length) {
+      return codebaseScopes;
+    }
+
     return this.meta?.validScopes?.length
       ? this.meta.validScopes
       : ['App', 'Backend', 'Portal', 'Pedido', 'Checkout'];
@@ -201,7 +234,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
   }
 
   onBranchAutocompleteFocus(field: 'branch' | 'compareBase'): void {
-    if (!this.meta?.gitlabConfigured) return;
+    if (!this.gitlabConfigured) return;
 
     this.branchSuggestionsField = field;
     const query =
@@ -212,7 +245,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
   }
 
   onBranchAutocompleteInput(field: 'branch' | 'compareBase'): void {
-    if (!this.meta?.gitlabConfigured) return;
+    if (!this.gitlabConfigured) return;
 
     this.branchSuggestionsField = field;
     const query =
@@ -229,11 +262,14 @@ export class DraftFormComponent implements OnInit, OnChanges {
   }
 
   private queueBranchSuggestions(query: string): void {
-    this.branchSearch$.next(query);
+    this.branchSearch$.next({
+      query,
+      codebaseId: this.form.controls.codebaseId.value,
+    });
   }
 
   private fetchBranchSuggestionsNow(query: string): void {
-    this.api.searchGitlabBranches(query).subscribe((results) => {
+    this.api.searchGitlabBranches(query, this.form.controls.codebaseId.value).subscribe((results) => {
       this.branchResults = results;
     });
   }
@@ -285,6 +321,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
     }
 
     const enrichWithGitlab = this.gitlabConfigured && Boolean(branch);
+    const codebase = this.selectedCodebase;
 
     this.generate.emit({
       mode: value.mode,
@@ -300,6 +337,8 @@ export class DraftFormComponent implements OnInit, OnChanges {
       gitlabBranch: enrichWithGitlab ? branch : undefined,
       gitlabCompareBase: enrichWithGitlab ? value.gitlabCompareBase.trim() || 'develop' : undefined,
       existingUserStoryRef: Number.isFinite(existingRef) ? existingRef : undefined,
+      codebaseId: value.codebaseId ?? undefined,
+      repositoryName: codebase?.name,
     });
   }
 }

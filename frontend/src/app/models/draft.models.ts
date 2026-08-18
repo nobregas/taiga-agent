@@ -61,6 +61,8 @@ export interface Draft {
   mode?: GenerationMode;
   existingUserStoryId?: number;
   existingUserStoryRef?: number;
+  codebaseId?: number;
+  repositoryName?: string;
 }
 
 export interface GenerateRequest {
@@ -78,6 +80,8 @@ export interface GenerateRequest {
   gitlabCompareBase?: string;
   existingUserStoryId?: number;
   existingUserStoryRef?: number;
+  codebaseId?: number;
+  repositoryName?: string;
 }
 
 export interface GenerateResponse {
@@ -125,6 +129,8 @@ export interface TaigaSprint {
 }
 
 export interface ProjectMeta {
+  workspaceId: number | null;
+  workspaceName: string | null;
   projectId: number | null;
   projectSlug: string;
   tags: string[];
@@ -136,9 +142,29 @@ export interface ProjectMeta {
   validScopes: string[];
   validTaskDomains: string[];
   currentUser: TaigaUser | null;
+  codebases: Array<{
+    id: number;
+    workspaceId: number;
+    name: string;
+    gitlabUrl: string;
+    gitlabToken: string | null;
+    gitlabProjectId: string | null;
+    gitlabDefaultBase: string;
+    gitlabDiffSnippetLines: number;
+    validScopes: string[];
+    validTaskDomains: string[];
+    isDefault: boolean;
+    hasGitlabToken: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  defaultCodebaseId: number | null;
   gitlabConfigured: boolean;
   defaultGitlabBaseBranch?: string;
   geminiConfigured: boolean;
+  settingsConfigured?: boolean;
+  hasActiveWorkspace?: boolean;
+  hasDefaultCodebase?: boolean;
   warning?: string;
 }
 
@@ -203,15 +229,64 @@ export function flattenTagPlan(plan: StructuredTagPlan): string[] {
     .filter(Boolean);
 }
 
-export function tagColorFor(plan: StructuredTagPlan, category: TagCategory, tagColors?: Record<string, string>): string {
+export function findExistingTag(name: string, tags: string[]): string | undefined {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  return tags.find((tag) => tag.toLowerCase() === normalized);
+}
+
+export function colorFromProject(
+  name: string,
+  projectColors?: Record<string, string | null>,
+): string | undefined {
+  if (!name || !projectColors) {
+    return undefined;
+  }
+
+  const match = Object.entries(projectColors).find(
+    ([tag]) => tag.toLowerCase() === name.trim().toLowerCase(),
+  );
+  return match?.[1] || undefined;
+}
+
+export function toColorInputValue(color: string): string {
+  const value = color.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return value;
+  }
+  if (/^#[0-9a-fA-F]{8}$/.test(value)) {
+    return `#${value.slice(1, 7)}`;
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(value)) {
+    return `#${value}`;
+  }
+  return '#737373';
+}
+
+export function tagColorFor(
+  plan: StructuredTagPlan,
+  category: TagCategory,
+  tagColors?: Record<string, string>,
+  projectColors?: Record<string, string | null>,
+): string {
   const name = plan[category].trim().toLowerCase();
-  return tagColors?.[name] ?? TAG_CATEGORY_COLORS[category];
+  return toColorInputValue(
+    tagColors?.[name] ??
+      colorFromProject(name, projectColors) ??
+      TAG_CATEGORY_COLORS[category],
+  );
 }
 
 export function buildUsDescription(
-  draft: Pick<Draft, 'contexto' | 'objetivo' | 'criteriosAceite' | 'branch'>,
+  draft: Pick<Draft, 'contexto' | 'objetivo' | 'criteriosAceite' | 'branch' | 'repositoryName'>,
 ): string {
   const criterios = draft.criteriosAceite?.trim() ?? '';
+  const repositorySection = draft.repositoryName?.trim()
+    ? `\n\n(Repositório)\n${draft.repositoryName.trim()}`
+    : '';
+
   return `(Contexto)
 ${draft.contexto.trim()}
 
@@ -222,7 +297,7 @@ ${draft.objetivo.trim()}
 ${criterios}
 
 (Branch)
-${draft.branch.trim()}`;
+${draft.branch.trim()}${repositorySection}`;
 }
 
 export function parseUsDescription(description: string): {

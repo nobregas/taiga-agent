@@ -45,22 +45,87 @@ export function tagPlanToTaigaTags(
   });
 }
 
+export function normalizeHexColor(color: string | null | undefined): string | null {
+  if (!color) {
+    return null;
+  }
+
+  const value = color.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    return value.toUpperCase();
+  }
+
+  if (/^#[0-9a-fA-F]{3}$/.test(value)) {
+    const [, r, g, b] = value;
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+
+  return value;
+}
+
+export function findExistingTag(name: string, existingTags: string[]): string | undefined {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  return existingTags.find((tag) => tag.toLowerCase() === normalized);
+}
+
+export function preferExistingTagNames(
+  plan: StructuredTagPlan,
+  existingTags: string[],
+): StructuredTagPlan {
+  const pick = (value: string) => findExistingTag(value, existingTags) ?? value.trim().toLowerCase();
+
+  return {
+    aplicacao: pick(plan.aplicacao),
+    escopo: pick(plan.escopo),
+    tipo: pick(plan.tipo),
+    dominio: pick(plan.dominio),
+  };
+}
+
+export function mergeTagColors(
+  plan: StructuredTagPlan,
+  generated: Record<string, string> | undefined,
+  existingTagColors: Record<string, string | null>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  for (const category of Object.keys(plan) as Array<keyof StructuredTagPlan>) {
+    const name = plan[category].trim().toLowerCase();
+    if (!name) {
+      continue;
+    }
+
+    const existingEntry = Object.entries(existingTagColors).find(
+      ([tag]) => tag.toLowerCase() === name,
+    );
+    const generatedColor = generated?.[name] ?? generated?.[plan[category]];
+    result[name] =
+      normalizeHexColor(existingEntry?.[1]) ??
+      normalizeHexColor(generatedColor) ??
+      TAG_CATEGORY_COLORS[category];
+  }
+
+  return result;
+}
+
 export function mergeTagPlanIntoExisting(
   plan: StructuredTagPlan,
   existingTags: string[],
 ): StructuredTagPlan {
-  const lower = new Set(existingTags.map((tag) => tag.toLowerCase()));
   const pick = (value: string, fallback: string) => {
     const normalized = value.trim().toLowerCase();
     if (!normalized) return fallback;
-    const match = existingTags.find((tag) => tag.toLowerCase() === normalized);
-    return match ?? normalized;
+    return findExistingTag(value, existingTags) ?? normalized;
   };
 
   return {
-    aplicacao: pick(plan.aplicacao, existingTags.find((t) => ['app', 'dashboard'].includes(t.toLowerCase())) ?? 'app'),
-    escopo: pick(plan.escopo, existingTags.find((t) => ['front', 'back', 'backend', 'frontend'].includes(t.toLowerCase())) ?? 'front'),
-    tipo: pick(plan.tipo, existingTags.find((t) => ['feature', 'fix', 'teste'].includes(t.toLowerCase())) ?? 'feature'),
+    aplicacao: pick(plan.aplicacao, findExistingTag('app', existingTags) ?? findExistingTag('dashboard', existingTags) ?? 'app'),
+    escopo: pick(plan.escopo, findExistingTag('front', existingTags) ?? findExistingTag('back', existingTags) ?? 'front'),
+    tipo: pick(plan.tipo, findExistingTag('feature', existingTags) ?? 'feature'),
     dominio: pick(plan.dominio, plan.dominio || 'geral'),
   };
 }

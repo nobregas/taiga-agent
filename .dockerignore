@@ -1,0 +1,15 @@
+.git
+.github
+.angular
+node_modules
+**/node_modules
+**/dist
+**/.angular
+.env
+*.log
+.DS_Store
+backend/data
+data
+frontend/.vscode
+**/*.md
+!README.md

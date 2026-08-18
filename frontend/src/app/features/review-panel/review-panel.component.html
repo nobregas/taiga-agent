@@ -58,17 +58,34 @@
 
         <div class="field" formGroupName="tagPlan">
           <span>Tags</span>
+          <small class="hint">Prefira tags ja existentes no projeto Taiga. A cor pode ser ajustada.</small>
           <div class="tag-plan-row">
             @for (category of tagCategories; track category) {
               <label class="tag-plan-item">
                 <span>{{ tagCategoryLabels[category] }}</span>
                 <div class="tag-input-row">
-                  <span class="color-dot" [style.background]="tagColor(category)"></span>
-                  <input [formControlName]="category" />
+                  <input
+                    type="color"
+                    class="color-picker"
+                    [value]="tagColor(category)"
+                    (input)="onTagColorChange(category, $event)"
+                    [attr.aria-label]="'Cor da tag ' + tagCategoryLabels[category]"
+                  />
+                  <input
+                    [formControlName]="category"
+                    list="taiga-project-tags"
+                    (change)="onTagNameChange(category)"
+                    (blur)="onTagNameChange(category)"
+                  />
                 </div>
               </label>
             }
           </div>
+          <datalist id="taiga-project-tags">
+            @for (tag of existingProjectTags; track tag) {
+              <option [value]="tag"></option>
+            }
+          </datalist>
         </div>
 
         <label class="field">

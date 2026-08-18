@@ -4,3 +4,5 @@ dist/
 .angular/
 *.log
 .DS_Store
+backend/data/
+data/

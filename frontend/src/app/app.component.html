@@ -8,14 +8,28 @@
       </div>
     </div>
 
-    <ol class="steps">
-      @for (item of steps; track item.id; let i = $index) {
-        <li [class.active]="step === item.id" [class.done]="stepIndex() > i">
-          <span class="dot">{{ i + 1 }}</span>
-          <span>{{ item.label }}</span>
-        </li>
-      }
-    </ol>
+    <nav class="sidebar-nav">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Wizard</a>
+      <a routerLink="/workspaces" routerLinkActive="active">Workspaces</a>
+      <a routerLink="/settings" routerLinkActive="active">Configuracoes</a>
+    </nav>
+
+    @if (workspaces.length) {
+      <label class="workspace-switch">
+        <span>Workspace</span>
+        <select
+          [value]="meta?.workspaceId ?? ''"
+          [disabled]="switchingWorkspace"
+          (change)="onWorkspaceChange($event)"
+        >
+          @for (workspace of workspaces; track workspace.id) {
+            <option [value]="workspace.id" [selected]="workspace.id === meta?.workspaceId">
+              {{ workspace.name }}
+            </option>
+          }
+        </select>
+      </label>
+    }
 
     @if (meta) {
       <div class="meta-card">
@@ -33,56 +47,7 @@
   </aside>
 
   <main class="main">
-    <header class="main-head">
-      <div>
-        <h2>
-          @switch (step) {
-            @case ('create') { Nova geracao }
-            @case ('review') { Revisar draft }
-            @case ('done') { {{ draft?.mode === 'existing_us' ? 'Editar US' : 'Publicado' }} }
-          }
-        </h2>
-        <p>Revise sempre antes de enviar ao Taiga</p>
-      </div>
-    </header>
-
-    @if (metaWarning) {
-      <div class="alert warn">{{ metaWarning }}</div>
-    }
-
-    <section class="stage">
-      @if (step === 'create') {
-        <app-draft-form
-          [meta]="meta"
-          [loading]="loading"
-          (generate)="onGenerate($event)"
-          (openExisting)="onOpenExisting($event)"
-        ></app-draft-form>
-      }
-
-      @if (step === 'review' && draft) {
-        <app-review-panel
-          [meta]="meta"
-          [draft]="draft"
-          [branchContext]="branchContext"
-          [publishing]="publishing"
-          (publish)="onPublish($event.mode, $event.draft)"
-          (reset)="onReset()"
-          (back)="onBack()"
-        ></app-review-panel>
-      }
-
-      @if (step === 'done' && draft && publishResult) {
-        <app-published-panel
-          [meta]="meta"
-          [draft]="draft"
-          [publishResult]="publishResult"
-          [saving]="savingPublished"
-          (save)="onSavePublished($event)"
-          (reset)="onReset()"
-        ></app-published-panel>
-      }
-    </section>
+    <router-outlet />
   </main>
 </div>
 

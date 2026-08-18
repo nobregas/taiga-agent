@@ -74,6 +74,22 @@
           </label>
         </div>
 
+        <label class="field field--repositorio">
+          <span>Repositorio GitLab</span>
+          <select formControlName="codebaseId">
+            @if (!meta?.codebases?.length) {
+              <option [ngValue]="null">Nenhum repositorio cadastrado</option>
+            }
+            @for (codebase of meta?.codebases ?? []; track codebase.id) {
+              <option [ngValue]="codebase.id">{{ codebase.name }}</option>
+            }
+          </select>
+          <small class="hint">
+            Repositorio usado para commits, diffs e contexto da US.
+            Cadastre em Workspaces se a lista estiver vazia.
+          </small>
+        </label>
+
         <label class="field">
           <span>Contexto geral da US</span>
           <small class="hint">Briefing amplo — a IA resume o estado atual do app na descricao final</small>

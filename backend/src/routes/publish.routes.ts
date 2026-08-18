@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { config } from '../config.js';
+import { runtimeConfig } from '../services/runtime-config.service.js';
 import {
   buildUsDescription,
   buildUsSubject,
@@ -18,8 +18,9 @@ function defaultOpenStatusId(statuses: Array<{ id: number; is_closed: boolean }>
 publishRouter.post('/', async (req, res, next) => {
   try {
     const { mode, draft } = publishRequestSchema.parse(req.body);
+    runtimeConfig.assertTaigaConfigured();
     const meta = await taigaService.getProjectMeta();
-    const projectId = config.taiga.projectId!;
+    const projectId = runtimeConfig.getTaigaConfig().projectId!;
     const subject = buildUsSubject(draft.escopo, draft.titulo);
     const description = buildUsDescription(draft);
 
@@ -116,8 +117,9 @@ publishRouter.post('/', async (req, res, next) => {
 publishRouter.patch('/update', async (req, res, next) => {
   try {
     const payload = updatePublishedSchema.parse(req.body);
+    runtimeConfig.assertTaigaConfigured();
     const meta = await taigaService.getProjectMeta();
-    const projectId = config.taiga.projectId!;
+    const projectId = runtimeConfig.getTaigaConfig().projectId!;
     const { draft, tasks, userStoryId, userStoryVersion } = payload;
 
     const tagEntries = tagPlanToTaigaTags(draft.tagPlan, draft.tagColors ?? {});

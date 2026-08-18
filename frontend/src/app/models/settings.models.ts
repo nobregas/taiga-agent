@@ -1,0 +1,81 @@
+export interface AppSettings {
+  taigaUrl: string;
+  taigaUsername: string | null;
+  taigaPassword: string | null;
+  taigaToken: string | null;
+  geminiApiKey: string | null;
+  geminiModel: string;
+  activeWorkspaceId: number | null;
+  updatedAt: string;
+  hasTaigaPassword: boolean;
+  hasTaigaToken: boolean;
+  hasGeminiApiKey: boolean;
+}
+
+export interface UpdateSettingsRequest {
+  taigaUrl?: string;
+  taigaUsername?: string;
+  taigaPassword?: string;
+  taigaToken?: string;
+  geminiApiKey?: string;
+  geminiModel?: string;
+}
+
+export interface Workspace {
+  id: number;
+  name: string;
+  taigaProjectId: number;
+  taigaProjectSlug: string | null;
+  defaultCodebaseId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Codebase {
+  id: number;
+  workspaceId: number;
+  name: string;
+  gitlabUrl: string;
+  gitlabToken: string | null;
+  gitlabProjectId: string | null;
+  gitlabDefaultBase: string;
+  gitlabDiffSnippetLines: number;
+  validScopes: string[];
+  validTaskDomains: string[];
+  isDefault: boolean;
+  hasGitlabToken: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaigaProjectOption {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface CreateWorkspaceRequest {
+  name: string;
+  taigaProjectId: number;
+  taigaProjectSlug?: string | null;
+}
+
+export interface UpdateWorkspaceRequest {
+  name?: string;
+  taigaProjectId?: number;
+  taigaProjectSlug?: string | null;
+}
+
+export interface CreateCodebaseRequest {
+  name: string;
+  gitlabUrl?: string;
+  gitlabToken?: string | null;
+  gitlabProjectId?: string | null;
+  gitlabDefaultBase?: string;
+  gitlabDiffSnippetLines?: number;
+  validScopes?: string[];
+  validTaskDomains?: string[];
+  isDefault?: boolean;
+}
+
+export interface UpdateCodebaseRequest extends CreateCodebaseRequest {}

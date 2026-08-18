@@ -143,11 +143,44 @@
   background: var(--surface-muted);
 }
 
+.sidebar-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sidebar-nav a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar-nav a.active,
+.sidebar-nav a:hover {
+  color: var(--text);
+  background: var(--surface-muted);
+}
+
+.workspace-switch {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.workspace-switch span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.workspace-switch select {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  background: var(--surface);
+}
+
 .main {
   padding: 1.25rem 1.5rem 1.5rem;
-  display: grid;
-  grid-template-rows: auto auto auto;
-  gap: 0.85rem;
   min-height: 100vh;
   align-content: start;
 }
@@ -182,6 +215,14 @@
   box-shadow: var(--shadow);
   width: 100%;
   align-self: start;
+}
+
+:host ::ng-deep .stage {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.5rem 1.25rem;
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .done-card {

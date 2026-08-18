@@ -1,0 +1,59 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <a routerLink="/" class="back-link">← Voltar</a>
+      <h2>Configuracoes</h2>
+      <p>Credenciais globais compartilhadas entre todos os workspaces</p>
+    </div>
+  </header>
+
+  @if (loading) {
+    <p class="muted">Carregando...</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()" class="panel">
+      <h3>Taiga</h3>
+      <label class="field">
+        <span>URL da API</span>
+        <input formControlName="taigaUrl" />
+      </label>
+      <label class="field">
+        <span>Email / usuario</span>
+        <input formControlName="taigaUsername" autocomplete="username" />
+      </label>
+      <label class="field">
+        <span>Senha</span>
+        <input
+          type="password"
+          formControlName="taigaPassword"
+          [placeholder]="settings?.hasTaigaPassword ? 'Deixe em branco para manter' : 'Senha Taiga'"
+          autocomplete="current-password"
+        />
+      </label>
+      <label class="field">
+        <span>Token (opcional)</span>
+        <input
+          formControlName="taigaToken"
+          [placeholder]="settings?.hasTaigaToken ? 'Deixe em branco para manter' : 'Token pre-obtido'"
+        />
+      </label>
+
+      <h3>Gemini</h3>
+      <label class="field">
+        <span>API key</span>
+        <input
+          type="password"
+          formControlName="geminiApiKey"
+          [placeholder]="settings?.hasGeminiApiKey ? 'Deixe em branco para manter' : 'Google AI Studio key'"
+        />
+      </label>
+      <label class="field">
+        <span>Modelo</span>
+        <input formControlName="geminiModel" />
+      </label>
+
+      <button type="submit" class="primary" [disabled]="saving">
+        {{ saving ? 'Salvando...' : 'Salvar configuracoes' }}
+      </button>
+    </form>
+  }
+</section>

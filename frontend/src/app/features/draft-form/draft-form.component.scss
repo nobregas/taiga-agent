@@ -12,7 +12,7 @@
 
 .mode-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
 }
 
@@ -232,6 +232,31 @@
 .field--escopo input {
   width: 100%;
   max-width: 7.5rem;
+}
+
+.field--repositorio {
+  width: 100%;
+  margin: 1rem 0 1.15rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  gap: 0.45rem;
+}
+
+.field--repositorio select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.field--repositorio select:focus {
+  outline: none;
+  border-color: #a3a3a3;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
 }
 
 .field {

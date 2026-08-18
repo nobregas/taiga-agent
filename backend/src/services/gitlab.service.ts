@@ -1,4 +1,4 @@
-import { config } from '../config.js';
+import type { GitlabConfig } from '../db/types.js';
 
 export interface BranchCommit {
   sha: string;
@@ -45,7 +45,7 @@ function isSensitivePath(path: string): boolean {
   return SENSITIVE_PATHS.some((pattern) => pattern.test(path));
 }
 
-function truncateSnippet(diff: string, maxLines = config.gitlab.diffSnippetLines): string | undefined {
+function truncateSnippet(diff: string, maxLines: number): string | undefined {
   if (!diff) {
     return undefined;
   }
@@ -61,8 +61,8 @@ function truncateSnippet(diff: string, maxLines = config.gitlab.diffSnippetLines
  * Only GET endpoints are called (commits + compare). No writes to GitLab.
  */
 export class GitlabService {
-  private async get<T>(path: string): Promise<T> {
-    if (!config.gitlab.token) {
+  private async get<T>(gitlab: GitlabConfig, path: string): Promise<T> {
+    if (!gitlab.token) {
       throw new Error('GITLAB_TOKEN is not configured');
     }
 
@@ -70,10 +70,10 @@ export class GitlabService {
       throw new Error('GitLab API path must start with /');
     }
 
-    const response = await fetch(`${config.gitlab.url}${path}`, {
+    const response = await fetch(`${gitlab.url}${path}`, {
       method: 'GET',
       headers: {
-        'PRIVATE-TOKEN': config.gitlab.token,
+        'PRIVATE-TOKEN': gitlab.token,
       },
     });
 
@@ -85,12 +85,12 @@ export class GitlabService {
     return response.json() as Promise<T>;
   }
 
-  async searchBranches(query = '', limit = 20): Promise<string[]> {
-    if (!config.gitlab.projectId) {
+  async searchBranches(gitlab: GitlabConfig, query = '', limit = 20): Promise<string[]> {
+    if (!gitlab.projectId) {
       throw new Error('GITLAB_PROJECT_ID is not configured');
     }
 
-    const projectId = encodeURIComponent(config.gitlab.projectId);
+    const projectId = encodeURIComponent(gitlab.projectId);
     const params = new URLSearchParams({
       per_page: String(Math.min(Math.max(limit, 1), 100)),
     });
@@ -101,18 +101,23 @@ export class GitlabService {
     }
 
     const branches = await this.get<Array<{ name: string }>>(
+      gitlab,
       `/projects/${projectId}/repository/branches?${params.toString()}`,
     );
 
     return branches.map((branch) => branch.name).slice(0, limit);
   }
 
-  async getBranchContext(branch: string, compareBase = config.gitlab.defaultBase): Promise<BranchContext> {
-    if (!config.gitlab.projectId) {
+  async getBranchContext(
+    gitlab: GitlabConfig,
+    branch: string,
+    compareBase = gitlab.defaultBase,
+  ): Promise<BranchContext> {
+    if (!gitlab.projectId) {
       throw new Error('GITLAB_PROJECT_ID is not configured');
     }
 
-    const projectId = encodeURIComponent(config.gitlab.projectId);
+    const projectId = encodeURIComponent(gitlab.projectId);
     const encodedBranch = encodeURIComponent(branch);
 
     type GitlabCommit = {
@@ -132,9 +137,11 @@ export class GitlabService {
 
     const [commits, compare] = await Promise.all([
       this.get<GitlabCommit[]>(
+        gitlab,
         `/projects/${projectId}/repository/commits?ref_name=${encodedBranch}&per_page=100`,
       ),
       this.get<GitlabCompare>(
+        gitlab,
         `/projects/${projectId}/repository/compare?from=${encodeURIComponent(compareBase)}&to=${encodedBranch}`,
       ).catch(() => ({ commits: [], diffs: [] } as GitlabCompare)),
     ]);
@@ -167,7 +174,7 @@ export class GitlabService {
         path: diff.new_path,
         additions,
         deletions,
-        snippet: isSensitivePath(diff.new_path) ? undefined : truncateSnippet(patch),
+        snippet: isSensitivePath(diff.new_path) ? undefined : truncateSnippet(patch, gitlab.diffSnippetLines),
       });
     }
 
