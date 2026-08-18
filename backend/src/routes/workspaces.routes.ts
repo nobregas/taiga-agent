@@ -3,6 +3,19 @@ import { settingsRepository } from '../repositories/settings.repository.js';
 import { workspaceRepository } from '../repositories/workspace.repository.js';
 import { runtimeConfig } from '../services/runtime-config.service.js';
 
+function parseNullableId(value: unknown): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export const workspacesRouter = Router();
 
 workspacesRouter.get('/', (_req, res) => {
@@ -29,6 +42,7 @@ workspacesRouter.post('/', (req, res, next) => {
       name,
       taigaProjectId,
       taigaProjectSlug,
+      mergeAssigneeId: parseNullableId(req.body.mergeAssigneeId) ?? null,
     });
 
     const settings = settingsRepository.getOrCreate();
@@ -61,6 +75,7 @@ workspacesRouter.patch('/:id', (req, res, next) => {
           : undefined,
       defaultCodebaseId:
         req.body.defaultCodebaseId !== undefined ? req.body.defaultCodebaseId : undefined,
+      mergeAssigneeId: parseNullableId(req.body.mergeAssigneeId),
     });
 
     const settings = settingsRepository.getOrCreate();

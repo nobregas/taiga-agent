@@ -8,14 +8,20 @@ import {
   TAG_CATEGORIES,
   TAG_CATEGORY_LABELS,
   TagCategory,
+  TaskDraft,
+  TaigaUser,
   buildUsDescription,
   colorFromProject,
   defaultOpenStatusId,
+  ensureDefaultFinalTasks,
   findDoneStatusId,
   findExistingTag,
   findNewStatusId,
   flattenTagPlan,
   isDoneStatus,
+  isMergeTask,
+  isSubirPrTask,
+  memberDisplayName,
   openTaskStatuses,
   parseUsDescription,
   tagColorFor,
@@ -42,6 +48,8 @@ export class ReviewPanelComponent {
   tagCategories = TAG_CATEGORIES;
   tagCategoryLabels = TAG_CATEGORY_LABELS;
   tagColorOverrides: Record<string, string> = {};
+  bulkAssigneeId: number | null = null;
+  newTaskSubject = '';
   private sourceDraft: Draft | null = null;
 
   @Input({ required: true })
@@ -56,6 +64,12 @@ export class ReviewPanelComponent {
     const defaultSprintId =
       value.milestoneId ?? (isNewUs ? (this.meta?.defaultSprintId ?? null) : null);
 
+    const defaultAssigneeId = this.defaultAssigneeId;
+    const preparedTasks = ensureDefaultFinalTasks(value.tasks, {
+      defaultAssigneeId,
+      mergeAssigneeId: this.mergeAssigneeId,
+    });
+
     this.form = this.fb.nonNullable.group({
       escopo: [value.escopo, Validators.required],
       titulo: [value.titulo, Validators.required],
@@ -69,18 +83,7 @@ export class ReviewPanelComponent {
         tipo: [value.tagPlan.tipo, Validators.required],
         dominio: [value.tagPlan.dominio, Validators.required],
       }),
-      tasks: this.fb.array(
-        value.tasks.map((task) =>
-          this.fb.nonNullable.group({
-            subject: [task.subject, Validators.required],
-            description: [task.description ?? ''],
-            statusId: [task.statusId ?? defaultTaskStatus ?? 0],
-            gitlabInformed: [task.gitlabInformed ?? false],
-            branchComplete: [task.branchComplete ?? false],
-            inferredFrom: [task.inferredFrom ?? [] as string[]],
-          }),
-        ),
-      ),
+      tasks: this.fb.array(preparedTasks.map((task) => this.buildTaskGroup(task, defaultTaskStatus))),
     });
   }
 
@@ -245,23 +248,182 @@ export class ReviewPanelComponent {
     this.markAllTasksDone();
   }
 
-  addTask(): void {
+  addTask(subject = this.newTaskSubject): void {
     const defaultTaskStatus = defaultOpenStatusId(this.meta?.taskStatuses ?? []);
+    const trimmed = subject.trim();
     this.tasks.push(
-      this.fb.nonNullable.group({
-        subject: ['', Validators.required],
-        description: [''],
-        statusId: [defaultTaskStatus ?? 0],
-        gitlabInformed: [false],
-        branchComplete: [false],
-        inferredFrom: [[] as string[]],
-      }),
+      this.buildTaskGroup(
+        {
+          subject: trimmed,
+          description: '',
+          assignedTo: isMergeTask(trimmed) ? this.mergeAssigneeId ?? this.defaultAssigneeId : this.defaultAssigneeId,
+        },
+        defaultTaskStatus,
+      ),
     );
+    this.newTaskSubject = '';
+    this.reorderFinalTasks();
     this.activeTab = 'tasks';
+  }
+
+  addTaskFromInput(): void {
+    this.addTask(this.newTaskSubject);
   }
 
   removeTask(index: number): void {
     this.tasks.removeAt(index);
+  }
+
+  restoreFinalTasks(): void {
+    this.reorderFinalTasks(true);
+  }
+
+  get defaultAssigneeId(): number | null {
+    return this.meta?.currentUser?.id ?? null;
+  }
+
+  get mergeAssigneeId(): number | null {
+    return this.meta?.mergeAssigneeId ?? null;
+  }
+
+  get members() {
+    const members = [...(this.meta?.members ?? [])];
+    const current = this.meta?.currentUser;
+    if (current && !members.some((member) => member.id === current.id)) {
+      members.unshift(current);
+    }
+    return members;
+  }
+
+  get mergeAssigneeLocked(): boolean {
+    return this.mergeAssigneeId != null;
+  }
+
+  get missingFinalTasks(): boolean {
+    if (!this.form) return false;
+    const subjects = this.tasks.controls.map((task) => String(task.get('subject')?.value ?? ''));
+    return !subjects.some(isSubirPrTask) || !subjects.some(isMergeTask);
+  }
+
+  get bulkAssignee() {
+    return this.members.find((member) => member.id === this.bulkAssigneeId) ?? null;
+  }
+
+  memberName(userId: number | null | undefined): string {
+    if (userId == null) {
+      return 'Sem responsavel';
+    }
+    const member = this.members.find((item) => item.id === userId);
+    return memberDisplayName(member) || `#${userId}`;
+  }
+
+  memberDisplay(member: TaigaUser): string {
+    return memberDisplayName(member);
+  }
+
+  memberInitials(member: TaigaUser): string {
+    const name = memberDisplayName(member);
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  isMergeAssigneeLocked(index: number): boolean {
+    return this.mergeAssigneeLocked && this.isMergeTaskAt(index);
+  }
+
+  isMergeTaskAt(index: number): boolean {
+    return isMergeTask(String(this.tasks.at(index).get('subject')?.value ?? ''));
+  }
+
+  isTaskAssignedToBulk(index: number): boolean {
+    return this.bulkAssigneeId != null && this.tasks.at(index).get('assignedTo')?.value === this.bulkAssigneeId;
+  }
+
+  toggleBulkAssignee(userId: number): void {
+    this.bulkAssigneeId = this.bulkAssigneeId === userId ? null : userId;
+  }
+
+  clearBulkAssignee(): void {
+    this.bulkAssigneeId = null;
+  }
+
+  onTaskCardClick(index: number, event: MouseEvent): void {
+    if (this.bulkAssigneeId == null) {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, a, label')) {
+      return;
+    }
+
+    this.assignTask(index, this.bulkAssigneeId);
+  }
+
+  assignTask(index: number, userId: number | null): void {
+    if (this.isMergeAssigneeLocked(index)) {
+      this.tasks.at(index).patchValue({ assignedTo: this.mergeAssigneeId });
+      return;
+    }
+
+    this.tasks.at(index).patchValue({ assignedTo: userId });
+  }
+
+  onAssigneeChange(index: number): void {
+    if (this.isMergeAssigneeLocked(index)) {
+      this.tasks.at(index).patchValue({ assignedTo: this.mergeAssigneeId });
+    }
+  }
+
+  onTaskSubjectChange(index: number): void {
+    const assignedTo = this.tasks.at(index).get('assignedTo');
+    if (this.isMergeAssigneeLocked(index)) {
+      assignedTo?.patchValue(this.mergeAssigneeId, { emitEvent: false });
+      assignedTo?.disable({ emitEvent: false });
+      return;
+    }
+
+    assignedTo?.enable({ emitEvent: false });
+  }
+
+  private buildTaskGroup(task: TaskDraft, defaultTaskStatus?: number) {
+    const assignedTo = isMergeTask(task.subject)
+      ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
+      : (task.assignedTo ?? this.defaultAssigneeId);
+
+    const assignedToControl = this.fb.control<number | null>(assignedTo);
+    if (isMergeTask(task.subject) && this.mergeAssigneeLocked) {
+      assignedToControl.disable({ emitEvent: false });
+    }
+
+    return this.fb.nonNullable.group({
+      subject: [task.subject, Validators.required],
+      description: [task.description ?? ''],
+      statusId: [task.statusId ?? defaultTaskStatus ?? 0],
+      assignedTo: assignedToControl,
+      gitlabInformed: [task.gitlabInformed ?? false],
+      branchComplete: [task.branchComplete ?? false],
+      inferredFrom: [task.inferredFrom ?? ([] as string[])],
+    });
+  }
+
+  private reorderFinalTasks(force = false): void {
+    const defaultTaskStatus = defaultOpenStatusId(this.meta?.taskStatuses ?? []);
+    const current = this.tasks.getRawValue() as TaskDraft[];
+    if (!force && !current.length) {
+      return;
+    }
+
+    const next = ensureDefaultFinalTasks(current, {
+      defaultAssigneeId: this.defaultAssigneeId,
+      mergeAssigneeId: this.mergeAssigneeId,
+    });
+
+    this.tasks.clear();
+    next.forEach((task) => this.tasks.push(this.buildTaskGroup(task, defaultTaskStatus)));
   }
 
   buildDraft(): Draft {
@@ -291,6 +453,7 @@ export class ReviewPanelComponent {
         subject: string;
         description?: string;
         statusId: number;
+        assignedTo?: number | null;
         gitlabInformed?: boolean;
         branchComplete?: boolean;
         inferredFrom?: string[];
@@ -298,6 +461,9 @@ export class ReviewPanelComponent {
         subject: task.subject,
         description: task.description,
         statusId: task.statusId,
+        assignedTo: isMergeTask(task.subject)
+          ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
+          : (task.assignedTo ?? this.defaultAssigneeId),
         gitlabInformed: task.gitlabInformed,
         branchComplete: task.branchComplete,
         inferredFrom: task.inferredFrom,

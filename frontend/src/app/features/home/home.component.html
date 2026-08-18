@@ -54,3 +54,57 @@
     ></app-published-panel>
   }
 </section>
+
+@if (generateOpen) {
+  <div class="generate-overlay" (click)="generateError ? closeGenerateModal() : null">
+    <div
+      #generateDialog
+      class="generate-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="generate-progress-title"
+      tabindex="-1"
+      (click)="$event.stopPropagation()"
+    >
+      <h3 id="generate-progress-title">
+        @if (generateError) {
+          Nao foi possivel gerar a US
+        } @else if (generateSucceeded) {
+          User story pronta
+        } @else {
+          Criando user story
+        }
+      </h3>
+
+      <ol class="generate-steps">
+        @for (label of generateSteps; track label; let i = $index) {
+          <li [attr.data-state]="generateStepState(i)">
+            <span class="generate-dot" aria-hidden="true"></span>
+            <span>{{ label }}</span>
+          </li>
+        }
+      </ol>
+
+      @if (generateError) {
+        <p class="generate-error" role="alert">{{ generateError }}</p>
+        <div class="generate-actions">
+          <button type="button" class="btn ghost" (click)="closeGenerateModal()">Fechar</button>
+          <button type="button" class="btn primary" (click)="retryGenerate()">Tentar de novo</button>
+        </div>
+      } @else {
+        <p class="generate-hint">
+          @if (generateSucceeded) {
+            Abrindo revisao...
+          } @else {
+            Isso pode levar alguns segundos.
+          }
+        </p>
+        @if (!generateSucceeded) {
+          <div class="generate-actions">
+            <button type="button" class="btn ghost" (click)="cancelGenerate()">Cancelar</button>
+          </div>
+        }
+      }
+    </div>
+  </div>
+}

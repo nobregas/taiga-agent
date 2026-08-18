@@ -3,6 +3,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Codebase, TaigaProjectOption, Workspace } from '../../models/settings.models';
+import { TaigaUser, memberDisplayName } from '../../models/draft.models';
 import { ApiService } from '../../services/api.service';
 import { MetaService } from '../../services/meta.service';
 import { ToastService } from '../../services/toast.service';
@@ -27,6 +28,8 @@ export class WorkspacesComponent implements OnInit {
   taigaProjects: TaigaProjectOption[] = [];
   selectedWorkspaceId: number | null = null;
   codebases: Codebase[] = [];
+  members: TaigaUser[] = [];
+  savingMergeRule = false;
   activeWorkspaceId: number | null = null;
   editingWorkspaceId: number | null = null;
   editingCodebaseId: number | null = null;
@@ -35,6 +38,7 @@ export class WorkspacesComponent implements OnInit {
     name: [''],
     taigaProjectId: [''],
     taigaProjectSlug: [''],
+    mergeAssigneeId: this.fb.control<number | null>(null),
   });
 
   codebaseForm = this.fb.nonNullable.group({
@@ -75,6 +79,9 @@ export class WorkspacesComponent implements OnInit {
         this.activeWorkspaceId = this.metaService.snapshot?.workspaceId ?? workspaces[0]?.id ?? null;
         this.selectedWorkspaceId = this.selectedWorkspaceId ?? this.activeWorkspaceId;
         this.loadCodebases();
+        if (this.selectedWorkspaceId) {
+          this.loadMembers(this.selectedWorkspaceId);
+        }
         this.loading = false;
       },
       error: (err) => {
@@ -99,6 +106,7 @@ export class WorkspacesComponent implements OnInit {
       this.cancelCodebaseEdit();
     }
     this.loadCodebases();
+    this.loadMembers(id);
   }
 
   loadCodebases(): void {
@@ -124,12 +132,14 @@ export class WorkspacesComponent implements OnInit {
       name: workspace.name,
       taigaProjectId: String(workspace.taigaProjectId),
       taigaProjectSlug: workspace.taigaProjectSlug ?? '',
+      mergeAssigneeId: workspace.mergeAssigneeId,
     });
+    this.loadMembers(workspace.id);
   }
 
   cancelWorkspaceEdit(): void {
     this.editingWorkspaceId = null;
-    this.workspaceForm.reset({ name: '', taigaProjectId: '', taigaProjectSlug: '' });
+    this.workspaceForm.reset({ name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null });
   }
 
   saveWorkspace(): void {
@@ -145,6 +155,7 @@ export class WorkspacesComponent implements OnInit {
       name: value.name.trim(),
       taigaProjectId,
       taigaProjectSlug: value.taigaProjectSlug.trim() || null,
+      mergeAssigneeId: value.mergeAssigneeId,
     };
 
     this.savingWorkspace = true;
@@ -170,11 +181,12 @@ export class WorkspacesComponent implements OnInit {
 
     this.api.createWorkspace(payload).subscribe({
       next: (workspace) => {
-        this.workspaceForm.reset({ name: '', taigaProjectId: '', taigaProjectSlug: '' });
+        this.workspaceForm.reset({ name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null });
         this.workspaces = [...this.workspaces.filter((item) => item.id !== workspace.id), workspace];
         this.selectedWorkspaceId = workspace.id;
         this.activeWorkspaceId = workspace.id;
         this.loadCodebases();
+        this.loadMembers(workspace.id);
         this.savingWorkspace = false;
         this.toast.show('Workspace criado.', 'info');
         this.metaService.afterWorkspaceChange(workspace.id).subscribe();
@@ -230,6 +242,7 @@ export class WorkspacesComponent implements OnInit {
         taigaProjectSlug: project.slug,
         name: this.workspaceForm.controls.name.value || project.name,
       });
+      this.loadMembers(undefined, project.id);
     }
   }
 
@@ -353,5 +366,53 @@ export class WorkspacesComponent implements OnInit {
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
+  }
+
+  get selectedWorkspace(): Workspace | null {
+    return this.workspaces.find((item) => item.id === this.selectedWorkspaceId) ?? null;
+  }
+
+  memberLabel(member: TaigaUser): string {
+    return memberDisplayName(member);
+  }
+
+  loadMembers(workspaceId?: number | null, projectId?: number | null): void {
+    if (!workspaceId && !projectId) {
+      this.members = [];
+      return;
+    }
+
+    this.api.listMembers(workspaceId, projectId).subscribe({
+      next: (response) => {
+        this.members = response.members ?? [];
+      },
+      error: () => {
+        this.members = [];
+      },
+    });
+  }
+
+  onMergeAssigneeChange(event: Event): void {
+    const workspaceId = this.selectedWorkspaceId;
+    if (!workspaceId) return;
+
+    const raw = (event.target as HTMLSelectElement).value;
+    const mergeAssigneeId = raw === '' ? null : Number(raw);
+    this.savingMergeRule = true;
+
+    this.api.updateWorkspace(workspaceId, { mergeAssigneeId }).subscribe({
+      next: (workspace) => {
+        this.workspaces = this.workspaces.map((item) => (item.id === workspace.id ? workspace : item));
+        this.savingMergeRule = false;
+        this.toast.show('Regra de Merge atualizada.', 'info');
+        if (this.activeWorkspaceId === workspaceId) {
+          this.metaService.afterWorkspaceChange().subscribe();
+        }
+      },
+      error: (err) => {
+        this.toast.show(err?.error?.error ?? 'Falha ao salvar regra de Merge.');
+        this.savingMergeRule = false;
+      },
+    });
   }
 }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { codebaseRepository } from '../repositories/codebase.repository.js';
+import { workspaceRepository } from '../repositories/workspace.repository.js';
 import { buildDraftFromUserStory } from '../utils/us.mapper.js';
 import { gitlabService } from '../services/gitlab.service.js';
 import { runtimeConfig } from '../services/runtime-config.service.js';
@@ -33,6 +34,8 @@ configRouter.get('/meta', async (_req, res) => {
       validScopes: runtimeConfig.getValidScopes(defaultCodebaseId),
       validTaskDomains: runtimeConfig.getValidTaskDomains(defaultCodebaseId),
       currentUser: meta.currentUser,
+      members: meta.members,
+      mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
       codebases,
       defaultCodebaseId,
       gitlabConfigured: runtimeConfig.isGitlabConfigured(defaultCodebaseId),
@@ -59,6 +62,8 @@ configRouter.get('/meta', async (_req, res) => {
       validScopes: runtimeConfig.getValidScopes(defaultCodebaseId),
       validTaskDomains: runtimeConfig.getValidTaskDomains(defaultCodebaseId),
       currentUser: null,
+      members: [],
+      mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
       codebases,
       defaultCodebaseId,
       gitlabConfigured: runtimeConfig.isGitlabConfigured(defaultCodebaseId),
@@ -82,6 +87,34 @@ configRouter.get('/tags', async (_req, res, next) => {
       tags: meta.tags,
       tagColors: meta.tagColors,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+configRouter.get('/members', async (req, res, next) => {
+  try {
+    runtimeConfig.assertTaigaCredentials();
+    const workspaceId = req.query.workspaceId ? Number.parseInt(String(req.query.workspaceId), 10) : null;
+    const projectIdQuery = req.query.projectId ? Number.parseInt(String(req.query.projectId), 10) : null;
+    let projectId = Number.isFinite(projectIdQuery) ? projectIdQuery : null;
+
+    if (Number.isFinite(workspaceId) && workspaceId) {
+      const workspace = workspaceRepository.getById(workspaceId);
+      if (!workspace) {
+        res.status(404).json({ error: 'Workspace not found' });
+        return;
+      }
+      projectId = workspace.taigaProjectId;
+    }
+
+    if (!projectId) {
+      runtimeConfig.assertTaigaConfigured();
+      projectId = runtimeConfig.getTaigaConfig().projectId;
+    }
+
+    const members = await taigaService.getProjectMembers(projectId);
+    res.json({ members });
   } catch (error) {
     next(error);
   }
@@ -176,6 +209,7 @@ configRouter.get('/userstories/:ref/edit', async (req, res, next) => {
           subject: task.subject,
           description: task.description,
           statusId: task.status,
+          assignedTo: task.assigned_to ?? null,
           version: task.version,
           url: taigaService.buildTaskUrl(task.ref, meta.projectSlug),
         })),

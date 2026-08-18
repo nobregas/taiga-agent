@@ -8,6 +8,7 @@ import { publishRouter } from './routes/publish.routes.js';
 import { settingsRouter } from './routes/settings.routes.js';
 import { workspacesRouter } from './routes/workspaces.routes.js';
 import { runtimeConfig } from './services/runtime-config.service.js';
+import { formatErrorMessage } from './utils/error-message.js';
 
 export function createApp() {
   const app = express();
@@ -39,8 +40,7 @@ export function createApp() {
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(error);
-    const message = error instanceof Error ? error.message : 'Unexpected error';
-    res.status(500).json({ error: message });
+    res.status(500).json({ error: formatErrorMessage(error) });
   });
 
   return app;

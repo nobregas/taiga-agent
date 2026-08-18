@@ -118,6 +118,21 @@
             </div>
             <input formControlName="subject" />
             <textarea formControlName="description" rows="2" placeholder="Detalhes"></textarea>
+            <label class="field field--assignee">
+              <span>Responsavel</span>
+              <select
+                formControlName="assignedTo"
+                (change)="onAssigneeChange($index)"
+              >
+                <option [ngValue]="null">Sem responsavel</option>
+                @for (member of members; track member.id) {
+                  <option [ngValue]="member.id">{{ member.full_name || member.username }}</option>
+                }
+              </select>
+              @if (isMergeAssigneeLocked($index)) {
+                <small class="hint">Definido pelo workspace para tasks de Merge</small>
+              }
+            </label>
             <div class="field">
               <span>Status</span>
               <div class="status-buttons">

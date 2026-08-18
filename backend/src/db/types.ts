@@ -16,6 +16,7 @@ export interface WorkspaceRow {
   taiga_project_id: number;
   taiga_project_slug: string | null;
   default_codebase_id: number | null;
+  merge_assignee_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +54,7 @@ export interface Workspace {
   taigaProjectId: number;
   taigaProjectSlug: string | null;
   defaultCodebaseId: number | null;
+  mergeAssigneeId: number | null;
   createdAt: string;
   updatedAt: string;
 }

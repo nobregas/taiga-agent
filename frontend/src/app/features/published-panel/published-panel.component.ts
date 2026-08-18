@@ -16,6 +16,8 @@ import {
   findNewStatusId,
   flattenTagPlan,
   isDoneStatus,
+  isMergeTask,
+  memberDisplayName,
   openTaskStatuses,
   parseUsDescription,
   tagColorFor,
@@ -100,8 +102,16 @@ export class PublishedPanelComponent implements OnChanges {
         dominio: [draft.tagPlan.dominio, Validators.required],
       }),
       tasks: this.fb.array(
-        result.tasks.map((task, index) =>
-          this.fb.nonNullable.group({
+        result.tasks.map((task, index) => {
+          const assignedTo = isMergeTask(task.subject)
+            ? (this.mergeAssigneeId ?? task.assignedTo ?? draft.tasks[index]?.assignedTo ?? this.defaultAssigneeId)
+            : (task.assignedTo ?? draft.tasks[index]?.assignedTo ?? this.defaultAssigneeId);
+          const assignedToControl = this.fb.control<number | null>(assignedTo);
+          if (isMergeTask(task.subject) && this.mergeAssigneeId != null) {
+            assignedToControl.disable({ emitEvent: false });
+          }
+
+          return this.fb.nonNullable.group({
             id: [task.id],
             version: [task.version],
             ref: [task.ref],
@@ -109,14 +119,49 @@ export class PublishedPanelComponent implements OnChanges {
             subject: [task.subject, Validators.required],
             description: [task.description ?? draft.tasks[index]?.description ?? ''],
             statusId: [task.statusId, Validators.required],
-          }),
-        ),
+            assignedTo: assignedToControl,
+          });
+        }),
       ),
     });
   }
 
   get existingProjectTags(): string[] {
     return this.meta?.tags ?? [];
+  }
+
+  get defaultAssigneeId(): number | null {
+    return this.meta?.currentUser?.id ?? null;
+  }
+
+  get mergeAssigneeId(): number | null {
+    return this.meta?.mergeAssigneeId ?? null;
+  }
+
+  get members() {
+    const members = [...(this.meta?.members ?? [])];
+    const current = this.meta?.currentUser;
+    if (current && !members.some((member) => member.id === current.id)) {
+      members.unshift(current);
+    }
+    return members;
+  }
+
+  memberLabel(userId: number | null | undefined): string {
+    if (userId == null) return 'Sem responsavel';
+    const member = this.members.find((item) => item.id === userId);
+    return memberDisplayName(member) || `#${userId}`;
+  }
+
+  isMergeAssigneeLocked(index: number): boolean {
+    const subject = String(this.tasks.at(index).get('subject')?.value ?? '');
+    return this.mergeAssigneeId != null && isMergeTask(subject);
+  }
+
+  onAssigneeChange(index: number): void {
+    if (this.isMergeAssigneeLocked(index)) {
+      this.tasks.at(index).patchValue({ assignedTo: this.mergeAssigneeId });
+    }
   }
 
   tagColor(category: TagCategory): string {
@@ -229,10 +274,13 @@ export class PublishedPanelComponent implements OnChanges {
       tags: flattenTagPlan(tagPlan),
       usStatusId: value.usStatusId,
       milestoneId: value.milestoneId,
-      tasks: value.tasks.map((task: { subject: string; description?: string; statusId: number }) => ({
+      tasks: value.tasks.map((task: { subject: string; description?: string; statusId: number; assignedTo?: number | null }) => ({
         subject: task.subject,
         description: task.description,
         statusId: task.statusId,
+        assignedTo: isMergeTask(task.subject)
+          ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
+          : (task.assignedTo ?? this.defaultAssigneeId),
       })),
     };
   }
@@ -262,6 +310,7 @@ export class PublishedPanelComponent implements OnChanges {
           subject: rawTasks[index].subject,
           description: rawTasks[index].description ?? '',
           statusId: rawTasks[index].statusId,
+          assignedTo: rawTasks[index].assignedTo ?? null,
         })),
       },
     });

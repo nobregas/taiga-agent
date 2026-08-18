@@ -51,6 +51,7 @@ export function buildDraftFromUserStory(
       subject: task.subject,
       description: task.description,
       statusId: task.status,
+      assignedTo: task.assigned_to ?? null,
     })),
   };
 }

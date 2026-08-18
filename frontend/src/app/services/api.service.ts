@@ -8,6 +8,7 @@ import {
   GenerateResponse,
   ProjectMeta,
   PublishResponse,
+  TaigaUser,
   UpdatePublishedRequest,
   UserStoryEditResponse,
   UserStorySearchResult,
@@ -88,6 +89,18 @@ export class ApiService {
     return this.http.get<{ tags: string[]; tagColors: Record<string, string | null> }>(
       `${this.baseUrl}/config/tags`,
     );
+  }
+
+  listMembers(workspaceId?: number | null, projectId?: number | null): Observable<{ members: TaigaUser[] }> {
+    const params: Record<string, string> = {};
+    if (workspaceId) {
+      params['workspaceId'] = String(workspaceId);
+    }
+    if (projectId) {
+      params['projectId'] = String(projectId);
+    }
+
+    return this.http.get<{ members: TaigaUser[] }>(`${this.baseUrl}/config/members`, { params });
   }
 
   listWorkspaces(): Observable<Workspace[]> {

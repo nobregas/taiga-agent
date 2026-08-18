@@ -11,62 +11,63 @@ import type { TaigaProjectMeta } from './taiga.service.js';
 import { buildSystemPrompt } from '../utils/template.js';
 import type { GenerateRequest } from '../schemas/draft.schema.js';
 import { defaultOpenStatusId, findDoneStatusId } from '../utils/task-status.js';
-import { mergeTagColors, preferExistingTagNames } from '../utils/tags.js';
+import { buildTagEnumSchema, constrainTagPlanToBank, mergeTagColors } from '../utils/tags.js';
+import { ensureDefaultFinalTasks } from '../utils/default-tasks.js';
 import { runtimeConfig } from './runtime-config.service.js';
 
-const aiResponseSchema = {
-  type: 'object',
-  properties: {
-    escopo: { type: 'string' },
-    titulo: { type: 'string' },
-    contextoGeral: { type: 'string' },
-    contexto: { type: 'string' },
-    objetivo: { type: 'string' },
-    criteriosAceite: { type: ['string', 'null'] },
-    branch: { type: 'string' },
-    tagPlan: {
-      type: 'object',
-      properties: {
-        aplicacao: { type: 'string' },
-        escopo: { type: 'string' },
-        tipo: { type: 'string' },
-        dominio: { type: 'string' },
-      },
-      required: ['aplicacao', 'escopo', 'tipo', 'dominio'],
-    },
-    tagColors: {
-      type: 'object',
-      additionalProperties: { type: 'string' },
-    },
-    tags: { type: 'array', items: { type: 'string' } },
-    tasks: {
-      type: 'array',
-      items: {
+function buildAiResponseSchema(existingTags: string[]) {
+  const tagValue = buildTagEnumSchema(existingTags);
+
+  return {
+    type: 'object',
+    properties: {
+      escopo: { type: 'string' },
+      titulo: { type: 'string' },
+      contextoGeral: { type: 'string' },
+      contexto: { type: 'string' },
+      objetivo: { type: 'string' },
+      criteriosAceite: { type: ['string', 'null'] },
+      branch: { type: 'string' },
+      tagPlan: {
         type: 'object',
         properties: {
-          subject: { type: 'string' },
-          description: { type: 'string' },
-          gitlabInformed: { type: 'boolean' },
-          branchComplete: { type: 'boolean' },
-          inferredFrom: { type: 'array', items: { type: 'string' } },
+          aplicacao: tagValue,
+          escopo: tagValue,
+          tipo: tagValue,
+          dominio: tagValue,
         },
-        required: ['subject'],
+        required: ['aplicacao', 'escopo', 'tipo', 'dominio'],
       },
+      tags: { type: 'array', items: tagValue },
+      tasks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            subject: { type: 'string' },
+            description: { type: 'string' },
+            gitlabInformed: { type: 'boolean' },
+            branchComplete: { type: 'boolean' },
+            inferredFrom: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['subject'],
+        },
+      },
+      gitNotes: { type: 'string' },
     },
-    gitNotes: { type: 'string' },
-  },
-  required: [
-    'escopo',
-    'titulo',
-    'contextoGeral',
-    'contexto',
-    'objetivo',
-    'criteriosAceite',
-    'branch',
-    'tagPlan',
-    'tasks',
-  ],
-};
+    required: [
+      'escopo',
+      'titulo',
+      'contextoGeral',
+      'contexto',
+      'objetivo',
+      'criteriosAceite',
+      'branch',
+      'tagPlan',
+      'tasks',
+    ],
+  };
+}
 
 export class GeminiService {
   private client: GoogleGenAI | null = null;
@@ -138,16 +139,10 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       );
     }
 
-    const tagColorsHint = Object.entries(meta.tagColors)
-      .filter(([, color]) => Boolean(color))
-      .map(([name, color]) => `${name}=${color}`)
-      .join(', ');
-
-    parts.push(
-      `Tags existentes no projeto Taiga (PREFIRA reutilizar nome e cor): ${meta.tags.join(', ') || 'nenhuma'}`,
-    );
-    if (tagColorsHint) {
-      parts.push(`Cores atuais das tags do projeto: ${tagColorsHint}`);
+    if (meta.tags.length) {
+      parts.push('Escolha tags SOMENTE do banco fechado do system prompt. NUNCA invente nomes.');
+    } else {
+      parts.push('Projeto sem tags cadastradas — crie tagPlan com nomes curtos.');
     }
     parts.push(
       `Prefixo de branch preferido pelo usuario: ${prefix} (pode mudar se fix/test/chore/hotfix for mais adequado)`,
@@ -184,7 +179,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       config: {
         systemInstruction: buildSystemPrompt(meta.tags, codebaseId ?? request.codebaseId),
         responseMimeType: 'application/json',
-        responseSchema: aiResponseSchema,
+        responseSchema: buildAiResponseSchema(meta.tags),
         temperature: 0.4,
       },
     });
@@ -197,7 +192,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
     const parsed = JSON.parse(text) as Draft;
     const escopo = parsed.escopo || request.escopo || 'App';
     const titulo = parsed.titulo || request.titulo || 'Nova user story';
-    const tagPlan = preferExistingTagNames(parsed.tagPlan, meta.tags);
+    const tagPlan = constrainTagPlanToBank(parsed.tagPlan, meta.tags);
 
     const draft = draftSchema.parse({
       ...parsed,
@@ -217,7 +212,10 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       tagPlan,
       tagColors: mergeTagColors(tagPlan, parsed.tagColors, meta.tagColors),
       tags: parsed.tags ?? [],
-      tasks: this.applyTaskBranchMetadata(parsed.tasks, meta, Boolean(branchContextText)),
+      tasks: ensureDefaultFinalTasks(
+        this.applyTaskBranchMetadata(parsed.tasks ?? [], meta, Boolean(branchContextText)),
+        { defaultAssigneeId: meta.currentUser?.id ?? null },
+      ),
     });
 
     return finalizeDraft(draft, escopo);

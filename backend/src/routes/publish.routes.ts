@@ -7,6 +7,7 @@ import {
   updatePublishedSchema,
 } from '../schemas/draft.schema.js';
 import { tagPlanToTaigaTags } from '../utils/tags.js';
+import { applyDefaultAssignees, isMergeTask } from '../utils/default-tasks.js';
 import { taigaService } from '../services/taiga.service.js';
 
 export const publishRouter = Router();
@@ -30,6 +31,16 @@ publishRouter.post('/', async (req, res, next) => {
       projectId,
       tagEntries.map((tag) => ({ name: tag.name, color: tag.color })),
       tagColorsMap,
+    );
+
+    const workspace = runtimeConfig.getActiveWorkspace();
+    const preparedTasks = applyDefaultAssignees(draft.tasks, {
+      defaultAssigneeId: meta.currentUser?.id ?? null,
+      mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
+    }).map((task) =>
+      workspace?.mergeAssigneeId && isMergeTask(task.subject)
+        ? { ...task, assignedTo: workspace.mergeAssigneeId }
+        : task,
     );
 
     const usStatusId = draft.usStatusId ?? defaultOpenStatusId(meta.userStoryStatuses);
@@ -73,10 +84,11 @@ publishRouter.post('/', async (req, res, next) => {
 
     const tasks = await taigaService.createTasksBulk({
       userStoryId: userStoryId!,
-      tasks: draft.tasks.map((task) => ({
+      tasks: preparedTasks.map((task) => ({
         subject: task.subject,
         description: task.description,
         statusId: task.statusId ?? defaultTaskStatusId,
+        assignedTo: task.assignedTo ?? meta.currentUser?.id ?? null,
       })),
       defaultStatusId: defaultTaskStatusId,
     });
@@ -99,6 +111,7 @@ publishRouter.post('/', async (req, res, next) => {
         subject: task.subject,
         description: task.description,
         statusId: task.status,
+        assignedTo: task.assigned_to ?? null,
         version: task.version,
         url: taigaService.buildTaskUrl(task.ref, meta.projectSlug),
       })),
@@ -142,13 +155,19 @@ publishRouter.patch('/update', async (req, res, next) => {
       version: userStoryVersion,
     });
 
+    const workspace = runtimeConfig.getActiveWorkspace();
     const updatedTasks = [];
     for (const task of tasks) {
+      const assignedTo =
+        workspace?.mergeAssigneeId && isMergeTask(task.subject)
+          ? workspace.mergeAssigneeId
+          : task.assignedTo;
       updatedTasks.push(
         await taigaService.updateTask(task.id, {
           subject: task.subject,
           description: task.description ?? '',
           statusId: task.statusId,
+          assignedTo,
           version: task.version,
         }),
       );
@@ -172,6 +191,7 @@ publishRouter.patch('/update', async (req, res, next) => {
         subject: task.subject,
         description: task.description,
         statusId: task.status,
+        assignedTo: task.assigned_to ?? null,
         version: task.version,
         url: taigaService.buildTaskUrl(task.ref, meta.projectSlug),
       })),

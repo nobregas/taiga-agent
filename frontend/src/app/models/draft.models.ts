@@ -29,6 +29,7 @@ export interface TaskDraft {
   subject: string;
   description?: string;
   statusId?: number;
+  assignedTo?: number | null;
   gitlabInformed?: boolean;
   branchComplete?: boolean;
   inferredFrom?: string[];
@@ -110,6 +111,7 @@ export interface TaigaUser {
   id: number;
   username: string;
   full_name: string;
+  photo?: string | null;
 }
 
 export interface TaigaStatus {
@@ -142,6 +144,8 @@ export interface ProjectMeta {
   validScopes: string[];
   validTaskDomains: string[];
   currentUser: TaigaUser | null;
+  members: TaigaUser[];
+  mergeAssigneeId: number | null;
   codebases: Array<{
     id: number;
     workspaceId: number;
@@ -185,6 +189,7 @@ export interface PublishedTask {
   subject: string;
   description: string;
   statusId: number;
+  assignedTo?: number | null;
   version: number;
   url: string;
 }
@@ -216,6 +221,7 @@ export interface UpdatePublishedRequest {
     subject: string;
     description?: string;
     statusId: number;
+    assignedTo?: number | null;
   }>;
 }
 
@@ -377,4 +383,115 @@ export function findNewStatusId(statuses: TaigaStatus[]): number | undefined {
   }
 
   return defaultOpenStatusId(statuses);
+}
+
+export const DEFAULT_FINAL_TASKS = {
+  subirPr: 'Subir PR',
+  merge: 'Merge',
+} as const;
+
+export function stripTaskDomainPrefix(subject: string): string {
+  return subject.replace(/^\[[^\]]*\]\s*/, '').trim();
+}
+
+export function normalizeTaskLabel(subject: string): string {
+  return stripTaskDomainPrefix(subject)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isMergeTask(subject: string): boolean {
+  const label = normalizeTaskLabel(subject);
+  return (
+    label === 'merge' ||
+    label === 'fazer merge' ||
+    label === 'realizar merge' ||
+    label === 'mergear' ||
+    label === 'merge da pr' ||
+    label === 'merge do pr'
+  );
+}
+
+export function isSubirPrTask(subject: string): boolean {
+  const label = normalizeTaskLabel(subject);
+  return (
+    label === 'subir pr' ||
+    label === 'subir pull request' ||
+    label === 'abrir pr' ||
+    label === 'abrir pull request' ||
+    label === 'criar pr' ||
+    label === 'criar pull request' ||
+    label === 'abrir o pr'
+  );
+}
+
+export function isDefaultFinalTask(subject: string): boolean {
+  return isSubirPrTask(subject) || isMergeTask(subject);
+}
+
+export function memberDisplayName(user: TaigaUser | null | undefined): string {
+  if (!user) {
+    return 'Sem responsavel';
+  }
+  return user.full_name?.trim() || user.username;
+}
+
+export function ensureDefaultFinalTasks(
+  tasks: TaskDraft[],
+  options: { defaultAssigneeId?: number | null; mergeAssigneeId?: number | null } = {},
+): TaskDraft[] {
+  const defaultAssigneeId = options.defaultAssigneeId ?? null;
+  const mergeAssigneeId = options.mergeAssigneeId ?? defaultAssigneeId;
+  const work: TaskDraft[] = [];
+  let subirPr: TaskDraft | undefined;
+  let merge: TaskDraft | undefined;
+
+  for (const task of tasks) {
+    if (isSubirPrTask(task.subject)) {
+      if (!subirPr) {
+        subirPr = { ...task, subject: DEFAULT_FINAL_TASKS.subirPr };
+      }
+      continue;
+    }
+
+    if (isMergeTask(task.subject)) {
+      if (!merge) {
+        merge = {
+          ...task,
+          subject: DEFAULT_FINAL_TASKS.merge,
+          assignedTo: mergeAssigneeId ?? task.assignedTo ?? defaultAssigneeId,
+        };
+      }
+      continue;
+    }
+
+    work.push({
+      ...task,
+      assignedTo: task.assignedTo ?? defaultAssigneeId,
+    });
+  }
+
+  work.push(
+    subirPr ?? {
+      subject: DEFAULT_FINAL_TASKS.subirPr,
+      description: '',
+      assignedTo: defaultAssigneeId,
+    },
+  );
+  work.push(
+    merge ?? {
+      subject: DEFAULT_FINAL_TASKS.merge,
+      description: '',
+      assignedTo: mergeAssigneeId,
+    },
+  );
+
+  return work.map((task) =>
+    isMergeTask(task.subject) && mergeAssigneeId != null
+      ? { ...task, assignedTo: mergeAssigneeId }
+      : { ...task, assignedTo: task.assignedTo ?? defaultAssigneeId },
+  );
 }

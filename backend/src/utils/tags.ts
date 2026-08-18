@@ -72,6 +72,115 @@ export function findExistingTag(name: string, existingTags: string[]): string | 
   return existingTags.find((tag) => tag.toLowerCase() === normalized);
 }
 
+export function compactTagBank(existingTags: string[]): string {
+  return existingTags.map((tag) => tag.trim()).filter(Boolean).join(',');
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const current = row[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = current;
+    }
+  }
+
+  return row[b.length];
+}
+
+export function fuzzyMatchTag(name: string, existingTags: string[]): string | undefined {
+  const exact = findExistingTag(name, existingTags);
+  if (exact) {
+    return exact;
+  }
+
+  const normalized = name.trim().toLowerCase();
+  if (!normalized || !existingTags.length) {
+    return undefined;
+  }
+
+  const startsWith = existingTags.find((tag) => {
+    const value = tag.toLowerCase();
+    return value.startsWith(normalized) || normalized.startsWith(value);
+  });
+  if (startsWith) {
+    return startsWith;
+  }
+
+  const contained = existingTags.find((tag) => {
+    const value = tag.toLowerCase();
+    return value.includes(normalized) || normalized.includes(value);
+  });
+  if (contained && Math.abs(contained.length - normalized.length) <= 4) {
+    return contained;
+  }
+
+  let best: string | undefined;
+  let bestDistance = Infinity;
+
+  for (const tag of existingTags) {
+    const distance = levenshtein(normalized, tag.toLowerCase());
+    const maxLen = Math.max(normalized.length, tag.length);
+    if (distance < bestDistance && distance <= 2 && distance / maxLen <= 0.45) {
+      bestDistance = distance;
+      best = tag;
+    }
+  }
+
+  return best;
+}
+
+export function constrainToExistingTag(name: string, existingTags: string[], fallback?: string): string {
+  if (!existingTags.length) {
+    return name.trim().toLowerCase();
+  }
+
+  return (
+    fuzzyMatchTag(name, existingTags) ??
+    (fallback ? fuzzyMatchTag(fallback, existingTags) : undefined) ??
+    existingTags[0]
+  );
+}
+
+export function constrainTagPlanToBank(
+  plan: StructuredTagPlan,
+  existingTags: string[],
+): StructuredTagPlan {
+  if (!existingTags.length) {
+    return {
+      aplicacao: plan.aplicacao.trim().toLowerCase(),
+      escopo: plan.escopo.trim().toLowerCase(),
+      tipo: plan.tipo.trim().toLowerCase(),
+      dominio: plan.dominio.trim().toLowerCase(),
+    };
+  }
+
+  return {
+    aplicacao: constrainToExistingTag(plan.aplicacao, existingTags, 'app'),
+    escopo: constrainToExistingTag(plan.escopo, existingTags, 'front'),
+    tipo: constrainToExistingTag(plan.tipo, existingTags, 'feature'),
+    dominio: constrainToExistingTag(plan.dominio, existingTags, 'geral'),
+  };
+}
+
+export function buildTagEnumSchema(existingTags: string[]): { type: 'string'; enum: string[] } | { type: 'string' } {
+  const unique = [...new Set(existingTags.map((tag) => tag.trim()).filter(Boolean))];
+  if (unique.length === 0 || unique.length > 180) {
+    return { type: 'string' };
+  }
+
+  return { type: 'string', enum: unique };
+}
+
 export function preferExistingTagNames(
   plan: StructuredTagPlan,
   existingTags: string[],

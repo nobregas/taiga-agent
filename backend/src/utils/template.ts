@@ -55,10 +55,28 @@ export function buildSystemPrompt(existingTags: string[], codebaseId?: number | 
     .map(([key, values]) => `- ${key}: ${values.join(', ')}`)
     .join('\n');
 
-  const existingTagsHint =
-    existingTags.length > 0
-      ? `PREFIRA tags ja cadastradas no projeto Taiga (mesmo nome): ${existingTags.join(', ')}. So crie uma tag nova se nenhuma existente servir.`
-      : 'Projeto sem tags — crie tagPlan completo e defina tagColors para cada tag.';
+  const closedTagBank = existingTags.map((tag) => tag.trim()).filter(Boolean);
+  const tagsSection =
+    closedTagBank.length > 0
+      ? `## Tags (lista fechada)
+Gere tagPlan com 4 campos (aplicacao, escopo, tipo, dominio).
+Slots:
+${tagStructure}
+
+BANCO DO PROJETO (unicos nomes permitidos): ${closedTagBank.join(',')}
+Regras:
+- Escolha SOMENTE nomes deste banco, copiados exatamente
+- Se nenhum servir, escolha o mais proximo do banco
+- NUNCA invente tag nova, NUNCA traduza, NUNCA crie sinonimo
+- tags = os 4 nomes escolhidos na ordem dos slots
+- Nao envie tagColors; o sistema reutiliza as cores do Taiga`
+      : `## Tags estruturadas (obrigatorio)
+Gere tagPlan com 4 campos:
+${tagStructure}
+
+${template.tags.rules ?? ''}
+Projeto sem tags cadastradas — defina tagPlan e tagColors (hex) para cada tag.
+- tags (array) deve listar as 4 tags na ordem: aplicacao, escopo, tipo, dominio`;
 
   return `Voce e um assistente que gera User Stories e Tasks para o Taiga seguindo o padrao do time.
 
@@ -81,24 +99,16 @@ ${template.us.contexto_rules ?? 'Texto enxuto sobre o estado atual do app.'}
 - Linguagem: ${template.task.language}
 - Prefixo por DOMINIO de negocio — nunca o escopo da US ([App], [Backend])
 - Dominios validos: ${domains}
+- Nao precisa incluir "Subir PR" nem "Merge"; o sistema acrescenta no fim
 - Exemplos:
 ${template.task.few_shot.map((item) => `  - ${item}`).join('\n')}
 
-## Tags estruturadas (obrigatorio)
-Gere tagPlan com 4 campos:
-${tagStructure}
-
-${template.tags.rules ?? ''}
-${existingTagsHint}
-- Reutilize a cor ja cadastrada no Taiga quando a tag existir
-- Se a tag nao existir no Taiga, inclua tagColors com hex por nome da tag (minusculo)
-- tags (array) deve listar as 4 tags na ordem: aplicacao, escopo, tipo, dominio
+${tagsSection}
 
 ## Exemplo
 US: ${template.few_shot_example.us.subject}
 Branch: ${template.few_shot_example.us.branch}
 Contexto: ${template.few_shot_example.us.contexto ?? 'Estado atual resumido.'}
-tagPlan: ${JSON.stringify(template.few_shot_example.tagPlan)}
 
-Responda APENAS JSON valido. Campos obrigatorios: escopo, titulo, contextoGeral, contexto, objetivo, criteriosAceite, branch, tagPlan, tagColors, tags, tasks.`;
+Responda APENAS JSON valido. Campos obrigatorios: escopo, titulo, contextoGeral, contexto, objetivo, criteriosAceite, branch, tagPlan, tags, tasks.`;
 }

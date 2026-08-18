@@ -34,6 +34,7 @@ export const taskDraftSchema = z.object({
     ),
   description: z.string().optional(),
   statusId: z.number().optional(),
+  assignedTo: z.number().nullable().optional(),
   gitlabInformed: z.boolean().optional(),
   branchComplete: z.boolean().optional(),
   inferredFrom: z.array(z.string()).optional(),
@@ -131,6 +132,7 @@ export const updatePublishedSchema = z.object({
       subject: z.string(),
       description: z.string().optional(),
       statusId: z.number(),
+      assignedTo: z.number().nullable().optional(),
     }),
   ),
 });

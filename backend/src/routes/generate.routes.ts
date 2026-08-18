@@ -5,6 +5,7 @@ import { geminiService } from '../services/gemini.service.js';
 import { gitlabService } from '../services/gitlab.service.js';
 import { runtimeConfig } from '../services/runtime-config.service.js';
 import { taigaService } from '../services/taiga.service.js';
+import { ensureDefaultFinalTasks } from '../utils/default-tasks.js';
 
 export const generateRouter = Router();
 
@@ -52,6 +53,12 @@ generateRouter.post('/', async (req, res, next) => {
       branchContextText,
       codebase?.id,
     );
+
+    const workspace = runtimeConfig.getActiveWorkspace();
+    draft.tasks = ensureDefaultFinalTasks(draft.tasks, {
+      defaultAssigneeId: meta.currentUser?.id ?? null,
+      mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
+    });
 
     if (draft.milestoneId == null && meta.defaultSprintId) {
       draft.milestoneId = meta.defaultSprintId;

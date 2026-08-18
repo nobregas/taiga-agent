@@ -27,6 +27,7 @@ export interface Workspace {
   taigaProjectId: number;
   taigaProjectSlug: string | null;
   defaultCodebaseId: number | null;
+  mergeAssigneeId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,12 +59,14 @@ export interface CreateWorkspaceRequest {
   name: string;
   taigaProjectId: number;
   taigaProjectSlug?: string | null;
+  mergeAssigneeId?: number | null;
 }
 
 export interface UpdateWorkspaceRequest {
   name?: string;
   taigaProjectId?: number;
   taigaProjectSlug?: string | null;
+  mergeAssigneeId?: number | null;
 }
 
 export interface CreateCodebaseRequest {

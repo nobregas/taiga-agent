@@ -8,6 +8,7 @@ function mapWorkspace(row: WorkspaceRow): Workspace {
     taigaProjectId: row.taiga_project_id,
     taigaProjectSlug: row.taiga_project_slug,
     defaultCodebaseId: row.default_codebase_id,
+    mergeAssigneeId: row.merge_assignee_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -17,6 +18,7 @@ export interface CreateWorkspaceInput {
   name: string;
   taigaProjectId: number;
   taigaProjectSlug?: string | null;
+  mergeAssigneeId?: number | null;
 }
 
 export interface UpdateWorkspaceInput {
@@ -24,6 +26,7 @@ export interface UpdateWorkspaceInput {
   taigaProjectId?: number;
   taigaProjectSlug?: string | null;
   defaultCodebaseId?: number | null;
+  mergeAssigneeId?: number | null;
 }
 
 export class WorkspaceRepository {
@@ -42,10 +45,15 @@ export class WorkspaceRepository {
   create(input: CreateWorkspaceInput): Workspace {
     const result = getDatabase()
       .prepare(
-        `INSERT INTO workspaces (name, taiga_project_id, taiga_project_slug, updated_at)
-         VALUES (?, ?, ?, datetime('now'))`,
+        `INSERT INTO workspaces (name, taiga_project_id, taiga_project_slug, merge_assignee_id, updated_at)
+         VALUES (?, ?, ?, ?, datetime('now'))`,
       )
-      .run(input.name.trim(), input.taigaProjectId, input.taigaProjectSlug?.trim() || null);
+      .run(
+        input.name.trim(),
+        input.taigaProjectId,
+        input.taigaProjectSlug?.trim() || null,
+        input.mergeAssigneeId ?? null,
+      );
 
     return this.getById(Number(result.lastInsertRowid))!;
   }
@@ -63,6 +71,7 @@ export class WorkspaceRepository {
           taiga_project_id = ?,
           taiga_project_slug = ?,
           default_codebase_id = ?,
+          merge_assignee_id = ?,
           updated_at = datetime('now')
          WHERE id = ?`,
       )
@@ -71,6 +80,7 @@ export class WorkspaceRepository {
         input.taigaProjectId ?? current.taigaProjectId,
         input.taigaProjectSlug !== undefined ? input.taigaProjectSlug : current.taigaProjectSlug,
         input.defaultCodebaseId !== undefined ? input.defaultCodebaseId : current.defaultCodebaseId,
+        input.mergeAssigneeId !== undefined ? input.mergeAssigneeId : current.mergeAssigneeId,
         id,
       );
 

@@ -37,6 +37,16 @@
             <span>Slug</span>
             <input formControlName="taigaProjectSlug" placeholder="meu-projeto" />
           </label>
+          <label class="field">
+            <span>Tasks de Merge devem ser sempre de</span>
+            <select formControlName="mergeAssigneeId">
+              <option [ngValue]="null">Sem regra (assignee livre)</option>
+              @for (member of members; track member.id) {
+                <option [ngValue]="member.id">{{ memberLabel(member) }}</option>
+              }
+            </select>
+            <small class="hint">A task Merge fica bloqueada neste usuario ao gerar e publicar.</small>
+          </label>
           <div class="form-actions">
             <button type="submit" class="primary" [disabled]="savingWorkspace">
               {{ workspaceSubmitLabel }}
@@ -77,6 +87,28 @@
             </article>
           }
         </div>
+
+        @if (selectedWorkspace) {
+          <div class="merge-rule">
+            <h3>Regra de Merge</h3>
+            <label class="field">
+              <span>Tasks de Merge devem ser sempre de</span>
+              <select
+                [value]="selectedWorkspace.mergeAssigneeId ?? ''"
+                [disabled]="savingMergeRule"
+                (change)="onMergeAssigneeChange($event)"
+              >
+                <option value="">Sem regra (assignee livre)</option>
+                @for (member of members; track member.id) {
+                  <option [value]="member.id">{{ memberLabel(member) }}</option>
+                }
+              </select>
+              <small class="hint">
+                Identifica a task pelo nome "Merge". O responsavel fica travado neste usuario.
+              </small>
+            </label>
+          </div>
+        }
       </section>
 
       <section class="panel">

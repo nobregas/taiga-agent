@@ -13,6 +13,7 @@ export interface TaigaUser {
   id: number;
   username: string;
   full_name: string;
+  photo?: string | null;
 }
 
 export interface TaigaUserStory {
@@ -35,6 +36,7 @@ export interface TaigaTask {
   user_story: number;
   project: number;
   status: number;
+  assigned_to: number | null;
   version: number;
 }
 
@@ -47,6 +49,7 @@ export interface TaigaProjectMeta {
   defaultSprintId: number | null;
   projectSlug: string;
   currentUser: TaigaUser | null;
+  members: TaigaUser[];
 }
 
 export interface TaigaProjectSummary {
@@ -55,23 +58,57 @@ export interface TaigaProjectSummary {
   slug: string;
 }
 
+interface TaigaMembership {
+  user: number | null;
+  user_extra_info?: {
+    username?: string;
+    full_name_display?: string;
+    full_name?: string;
+    photo?: string | null;
+  } | null;
+}
+
+const PROJECT_CACHE_TTL_MS = 5 * 60 * 1000;
+
 export class TaigaService {
   private authToken: string | null = null;
   private currentUser: TaigaUser | null = null;
+  private readonly projectMetaCache = new Map<number, { at: number; value: TaigaProjectMeta }>();
+  private readonly membersCache = new Map<number, { at: number; value: TaigaUser[] }>();
 
   invalidateAuth(): void {
     this.authToken = null;
     this.currentUser = null;
+    this.invalidateProjectCache();
+  }
+
+  invalidateProjectCache(projectId?: number | null): void {
+    if (projectId) {
+      this.projectMetaCache.delete(projectId);
+      this.membersCache.delete(projectId);
+      return;
+    }
+
+    this.projectMetaCache.clear();
+    this.membersCache.clear();
   }
 
   private getConfig() {
     return runtimeConfig.getTaigaConfig();
   }
 
+  private async fetchTaiga(url: string, init: RequestInit = {}): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      throw new Error(`Falha ao conectar no Taiga (${this.getConfig().url})`, { cause: error });
+    }
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const token = await this.getToken();
     const { url } = this.getConfig();
-    const response = await fetch(`${url}${path}`, {
+    const response = await this.fetchTaiga(`${url}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -113,7 +150,7 @@ export class TaigaService {
       throw new Error('Taiga credentials are not configured');
     }
 
-    const data = await fetch(`${taiga.url}/auth`, {
+    const data = await this.fetchTaiga(`${taiga.url}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -147,10 +184,65 @@ export class TaigaService {
 
   async getCurrentUser(): Promise<TaigaUser> {
     await this.getToken();
-    if (!this.currentUser) {
-      throw new Error('Unable to resolve current Taiga user');
+    if (this.currentUser) {
+      return this.currentUser;
     }
+
+    const me = await this.request<{
+      id: number;
+      username: string;
+      full_name?: string;
+      full_name_display?: string;
+      photo?: string | null;
+    }>('/users/me');
+
+    this.currentUser = {
+      id: me.id,
+      username: me.username,
+      full_name: me.full_name_display ?? me.full_name ?? me.username,
+      photo: me.photo ?? null,
+    };
+
     return this.currentUser;
+  }
+
+  private mapMemberships(memberships: TaigaMembership[]): TaigaUser[] {
+    const seen = new Set<number>();
+    const members: TaigaUser[] = [];
+
+    for (const membership of memberships) {
+      if (!membership.user || seen.has(membership.user)) {
+        continue;
+      }
+
+      seen.add(membership.user);
+      const extra = membership.user_extra_info;
+      members.push({
+        id: membership.user,
+        username: extra?.username ?? String(membership.user),
+        full_name: extra?.full_name_display ?? extra?.full_name ?? extra?.username ?? String(membership.user),
+        photo: extra?.photo ?? null,
+      });
+    }
+
+    return members.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'));
+  }
+
+  async getProjectMembers(projectId?: number | null): Promise<TaigaUser[]> {
+    const resolvedProjectId = projectId ?? this.getConfig().projectId;
+    if (!resolvedProjectId) {
+      throw new Error('TAIGA_PROJECT_ID is not configured');
+    }
+
+    const cached = this.membersCache.get(resolvedProjectId);
+    if (cached && Date.now() - cached.at < PROJECT_CACHE_TTL_MS) {
+      return cached.value;
+    }
+
+    const memberships = await this.request<TaigaMembership[]>(`/memberships?project=${resolvedProjectId}`);
+    const members = this.mapMemberships(memberships);
+    this.membersCache.set(resolvedProjectId, { at: Date.now(), value: members });
+    return members;
   }
 
   async listProjects(): Promise<TaigaProjectSummary[]> {
@@ -169,12 +261,18 @@ export class TaigaService {
       throw new Error('TAIGA_PROJECT_ID is not configured');
     }
 
-    const [project, tagColors, usStatuses, taskStatuses, milestones] = await Promise.all([
+    const cached = this.projectMetaCache.get(resolvedProjectId);
+    if (cached && Date.now() - cached.at < PROJECT_CACHE_TTL_MS) {
+      return cached.value;
+    }
+
+    const [project, tagColors, usStatuses, taskStatuses, milestones, members] = await Promise.all([
       this.request<{ id: number; slug: string }>(`/projects/${resolvedProjectId}`),
       this.request<Record<string, string | null>>(`/projects/${resolvedProjectId}/tags_colors`),
       this.request<TaigaStatus[]>(`/userstory-statuses?project=${resolvedProjectId}`),
       this.request<TaigaStatus[]>(`/task-statuses?project=${resolvedProjectId}`),
       this.request<TaigaMilestone[]>(`/milestones?project=${resolvedProjectId}`),
+      this.getProjectMembers(resolvedProjectId),
     ]);
 
     let currentUser: TaigaUser | null = null;
@@ -184,7 +282,12 @@ export class TaigaService {
       currentUser = null;
     }
 
-    return {
+    let memberList = members;
+    if (currentUser && !memberList.some((member) => member.id === currentUser.id)) {
+      memberList = [currentUser, ...memberList];
+    }
+
+    const meta: TaigaProjectMeta = {
       tags: Object.keys(tagColors),
       tagColors,
       userStoryStatuses: usStatuses,
@@ -193,7 +296,11 @@ export class TaigaService {
       defaultSprintId: pickDefaultSprintId(milestones) ?? null,
       projectSlug: project.slug,
       currentUser,
+      members: memberList,
     };
+
+    this.projectMetaCache.set(resolvedProjectId, { at: Date.now(), value: meta });
+    return meta;
   }
 
   async findUserStoryByRef(ref: number, projectId?: number | null): Promise<TaigaUserStory> {
@@ -273,7 +380,7 @@ export class TaigaService {
     userStoryId: number;
     projectId?: number;
     statusId?: number;
-    assignedTo?: number;
+    assignedTo?: number | null;
   }): Promise<TaigaTask> {
     const projectId = input.projectId ?? this.getConfig().projectId;
     if (!projectId) {
@@ -282,7 +389,7 @@ export class TaigaService {
 
     const meta = await this.getProjectMeta(projectId);
     const openStatus = meta.taskStatuses.find((status) => !status.is_closed) ?? meta.taskStatuses[0];
-    const assignedTo = input.assignedTo ?? meta.currentUser?.id;
+    const assignedTo = input.assignedTo === undefined ? (meta.currentUser?.id ?? null) : input.assignedTo;
 
     return this.request<TaigaTask>('/tasks', {
       method: 'POST',
@@ -292,20 +399,27 @@ export class TaigaService {
         description: input.description ?? '',
         user_story: input.userStoryId,
         status: input.statusId ?? openStatus?.id,
-        assigned_to: assignedTo ?? null,
+        assigned_to: assignedTo,
       }),
     });
   }
 
   async createTasksBulk(input: {
     userStoryId: number;
-    tasks: Array<{ subject: string; description?: string; statusId?: number }>;
+    tasks: Array<{ subject: string; description?: string; statusId?: number; assignedTo?: number | null }>;
     projectId?: number;
-    assignedTo?: number;
+    assignedTo?: number | null;
     defaultStatusId?: number;
   }): Promise<TaigaTask[]> {
-    const assignedTo = input.assignedTo ?? (await this.getCurrentUser()).id;
     const created: TaigaTask[] = [];
+    let fallbackAssignee = input.assignedTo;
+    if (fallbackAssignee === undefined) {
+      try {
+        fallbackAssignee = (await this.getCurrentUser()).id;
+      } catch {
+        fallbackAssignee = null;
+      }
+    }
 
     for (const task of input.tasks) {
       created.push(
@@ -314,7 +428,7 @@ export class TaigaService {
           description: task.description,
           userStoryId: input.userStoryId,
           projectId: input.projectId,
-          assignedTo,
+          assignedTo: task.assignedTo === undefined ? fallbackAssignee : task.assignedTo,
           statusId: task.statusId ?? input.defaultStatusId,
         }),
       );
@@ -376,6 +490,7 @@ export class TaigaService {
       }
     }
 
+    this.invalidateProjectCache(projectId);
     return ensured;
   }
 
@@ -417,6 +532,7 @@ export class TaigaService {
       subject?: string;
       description?: string;
       statusId?: number;
+      assignedTo?: number | null;
       version?: number;
     },
   ): Promise<TaigaTask> {
@@ -426,6 +542,7 @@ export class TaigaService {
         ...(input.subject ? { subject: input.subject } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.statusId ? { status: input.statusId } : {}),
+        ...(input.assignedTo !== undefined ? { assigned_to: input.assignedTo } : {}),
         ...(input.version ? { version: input.version } : {}),
       }),
     });
