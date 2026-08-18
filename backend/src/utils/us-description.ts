@@ -1,3 +1,5 @@
+import { formatAcceptanceCriteria } from './acceptance-criteria.js';
+
 export function parseUsDescription(description: string): {
   contexto: string;
   objetivo: string;
@@ -22,7 +24,7 @@ export function parseUsDescription(description: string): {
   return {
     contexto: sections['contexto'] ?? '',
     objetivo: sections['objetivo'] ?? '',
-    criteriosAceite: criterios || null,
+    criteriosAceite: formatAcceptanceCriteria(criterios) || null,
     branch: sections['branch'] ?? '',
   };
 }

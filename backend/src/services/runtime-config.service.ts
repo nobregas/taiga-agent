@@ -102,10 +102,13 @@ export class RuntimeConfigService {
     this.assertTaigaCredentials();
   }
 
+  isTaigaAuthenticated(): boolean {
+    return Boolean(this.getTaigaConfig().token);
+  }
+
   assertTaigaCredentials(): void {
-    const taiga = this.getTaigaConfig();
-    if (!taiga.token && (!taiga.username || !taiga.password)) {
-      throw new Error('Configure credenciais Taiga em Configuracoes');
+    if (!this.isTaigaAuthenticated()) {
+      throw new Error('Entre com sua conta Taiga para continuar');
     }
   }
 

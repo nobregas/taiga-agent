@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { CriteriosEditorComponent } from '../../components/criterios-editor/criterios-editor.component';
+import { SelectComponent } from '../../components/select/select.component';
+import { TasksBoardComponent, createTaskFormGroup } from '../tasks-board/tasks-board.component';
 import {
   Draft,
   ProjectMeta,
@@ -8,25 +11,28 @@ import {
   TAG_CATEGORIES,
   TAG_CATEGORY_LABELS,
   TagCategory,
-  buildUsDescription,
+  areAllTasksComplete,
   colorFromProject,
-  defaultOpenStatusId,
-  findDoneStatusId,
+  ensureDefaultFinalTasks,
   findExistingTag,
-  findNewStatusId,
   flattenTagPlan,
-  isDoneStatus,
+  formatAcceptanceCriteria,
   isMergeTask,
-  memberDisplayName,
-  openTaskStatuses,
   parseUsDescription,
+  resolveUserStoryStatusId,
   tagColorFor,
 } from '../../models/draft.models';
 
 @Component({
   selector: 'app-published-panel',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    SelectComponent,
+    CriteriosEditorComponent,
+    TasksBoardComponent,
+  ],
   templateUrl: './published-panel.component.html',
   styleUrl: './published-panel.component.scss',
 })
@@ -73,57 +79,11 @@ export class PublishedPanelComponent implements OnChanges {
     return this.meta?.sprints ?? [];
   }
 
-  get openTaskStatusesList() {
-    return openTaskStatuses(this.taskStatuses);
-  }
-
-  get doneStatusId(): number | undefined {
-    return findDoneStatusId(this.taskStatuses);
-  }
-
-  private buildForm(draft: Draft, result: PublishResponse): void {
-    this.tagColorOverrides = { ...(draft.tagColors ?? {}) };
-    const defaultUsStatus = draft.usStatusId ?? result.userStory.statusId ?? defaultOpenStatusId(this.usStatuses);
-    const description = result.userStory.description ?? buildUsDescription(draft);
-    const isEditingExisting = draft.mode === 'existing_us';
-    const defaultSprintId =
-      draft.milestoneId ?? (isEditingExisting ? null : (this.meta?.defaultSprintId ?? null));
-
-    this.form = this.fb.nonNullable.group({
-      escopo: [draft.escopo, Validators.required],
-      titulo: [draft.titulo, Validators.required],
-      usDescription: [description, Validators.required],
-      usStatusId: [defaultUsStatus ?? 0, Validators.required],
-      milestoneId: [defaultSprintId],
-      tagPlan: this.fb.nonNullable.group({
-        aplicacao: [draft.tagPlan.aplicacao, Validators.required],
-        escopo: [draft.tagPlan.escopo, Validators.required],
-        tipo: [draft.tagPlan.tipo, Validators.required],
-        dominio: [draft.tagPlan.dominio, Validators.required],
-      }),
-      tasks: this.fb.array(
-        result.tasks.map((task, index) => {
-          const assignedTo = isMergeTask(task.subject)
-            ? (this.mergeAssigneeId ?? task.assignedTo ?? draft.tasks[index]?.assignedTo ?? this.defaultAssigneeId)
-            : (task.assignedTo ?? draft.tasks[index]?.assignedTo ?? this.defaultAssigneeId);
-          const assignedToControl = this.fb.control<number | null>(assignedTo);
-          if (isMergeTask(task.subject) && this.mergeAssigneeId != null) {
-            assignedToControl.disable({ emitEvent: false });
-          }
-
-          return this.fb.nonNullable.group({
-            id: [task.id],
-            version: [task.version],
-            ref: [task.ref],
-            url: [task.url],
-            subject: [task.subject, Validators.required],
-            description: [task.description ?? draft.tasks[index]?.description ?? ''],
-            statusId: [task.statusId, Validators.required],
-            assignedTo: assignedToControl,
-          });
-        }),
-      ),
-    });
+  get sprintOptions() {
+    return [
+      { value: null, label: 'Sem sprint' },
+      ...this.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
+    ];
   }
 
   get existingProjectTags(): string[] {
@@ -138,30 +98,61 @@ export class PublishedPanelComponent implements OnChanges {
     return this.meta?.mergeAssigneeId ?? null;
   }
 
-  get members() {
-    const members = [...(this.meta?.members ?? [])];
-    const current = this.meta?.currentUser;
-    if (current && !members.some((member) => member.id === current.id)) {
-      members.unshift(current);
-    }
-    return members;
-  }
+  private buildForm(draft: Draft, result: PublishResponse): void {
+    this.tagColorOverrides = { ...(draft.tagColors ?? {}) };
+    const description = result.userStory.description ?? '';
+    const parsed = parseUsDescription(description);
+    const isEditingExisting = draft.mode === 'existing_us';
+    const defaultSprintId =
+      draft.milestoneId ?? (isEditingExisting ? null : (this.meta?.defaultSprintId ?? null));
 
-  memberLabel(userId: number | null | undefined): string {
-    if (userId == null) return 'Sem responsavel';
-    const member = this.members.find((item) => item.id === userId);
-    return memberDisplayName(member) || `#${userId}`;
-  }
+    const preparedTasks = ensureDefaultFinalTasks(
+      result.tasks.map((task, index) => ({
+        id: task.id,
+        version: task.version,
+        ref: task.ref,
+        url: task.url,
+        subject: task.subject,
+        description: task.description ?? draft.tasks[index]?.description ?? '',
+        statusId: task.statusId,
+        assignedTo: task.assignedTo ?? draft.tasks[index]?.assignedTo ?? this.defaultAssigneeId,
+      })),
+      {
+        defaultAssigneeId: this.defaultAssigneeId,
+        mergeAssigneeId: this.mergeAssigneeId,
+      },
+    );
 
-  isMergeAssigneeLocked(index: number): boolean {
-    const subject = String(this.tasks.at(index).get('subject')?.value ?? '');
-    return this.mergeAssigneeId != null && isMergeTask(subject);
-  }
+    const defaultUsStatus = resolveUserStoryStatusId(this.usStatuses, {
+      allTasksComplete: areAllTasksComplete(preparedTasks, this.taskStatuses),
+      preferredId: draft.usStatusId ?? result.userStory.statusId,
+    });
 
-  onAssigneeChange(index: number): void {
-    if (this.isMergeAssigneeLocked(index)) {
-      this.tasks.at(index).patchValue({ assignedTo: this.mergeAssigneeId });
-    }
+    this.form = this.fb.nonNullable.group({
+      escopo: [draft.escopo, Validators.required],
+      titulo: [draft.titulo, Validators.required],
+      contexto: [parsed.contexto || draft.contexto, Validators.required],
+      objetivo: [parsed.objetivo || draft.objetivo, Validators.required],
+      criteriosAceite: [formatAcceptanceCriteria(parsed.criteriosAceite ?? draft.criteriosAceite)],
+      branch: [parsed.branch || draft.branch, Validators.required],
+      usStatusId: [defaultUsStatus ?? 0, Validators.required],
+      milestoneId: [defaultSprintId],
+      tagPlan: this.fb.nonNullable.group({
+        aplicacao: [draft.tagPlan.aplicacao, Validators.required],
+        escopo: [draft.tagPlan.escopo, Validators.required],
+        tipo: [draft.tagPlan.tipo, Validators.required],
+        dominio: [draft.tagPlan.dominio, Validators.required],
+      }),
+      tasks: this.fb.array(
+        preparedTasks.map((task) =>
+          createTaskFormGroup(this.fb, task, {
+            defaultAssigneeId: this.defaultAssigneeId,
+            mergeAssigneeId: this.mergeAssigneeId,
+            published: true,
+          }),
+        ),
+      ),
+    });
   }
 
   tagColor(category: TagCategory): string {
@@ -206,82 +197,48 @@ export class PublishedPanelComponent implements OnChanges {
     this.form.patchValue({ usStatusId: statusId });
   }
 
-  setTaskStatus(index: number, statusId: number): void {
-    this.tasks.at(index).patchValue({ statusId });
-  }
-
-  isTaskDone(index: number): boolean {
-    const statusId = this.tasks.at(index).get('statusId')?.value as number;
-    return isDoneStatus(statusId, this.taskStatuses);
-  }
-
-  toggleTaskDone(index: number): void {
-    const doneId = this.doneStatusId;
-    if (!doneId) return;
-
-    if (this.isTaskDone(index)) {
-      const reopenId = defaultOpenStatusId(this.taskStatuses) ?? this.openTaskStatusesList[0]?.id;
-      if (reopenId) this.setTaskStatus(index, reopenId);
+  syncUsStatusFromTasks(): void {
+    if (!this.form) {
       return;
     }
 
-    this.setTaskStatus(index, doneId);
-  }
+    const next = resolveUserStoryStatusId(this.usStatuses, {
+      allTasksComplete: areAllTasksComplete(this.tasks.getRawValue(), this.taskStatuses),
+      preferredId: this.form.get('usStatusId')?.value,
+    });
 
-  markAllTasksDone(): void {
-    const doneId = this.doneStatusId;
-    if (!doneId) return;
-
-    this.tasks.controls.forEach((_, index) => this.setTaskStatus(index, doneId));
-  }
-
-  markAllTasksNew(): void {
-    const newId = findNewStatusId(this.taskStatuses);
-    if (!newId) return;
-
-    this.tasks.controls.forEach((_, index) => this.setTaskStatus(index, newId));
-  }
-
-  get allTasksDone(): boolean {
-    if (!this.tasks.length) return false;
-    return this.tasks.controls.every((_, index) => this.isTaskDone(index));
-  }
-
-  toggleAllTasksDone(): void {
-    if (this.allTasksDone) {
-      this.markAllTasksNew();
-      return;
+    if (next && next !== this.form.get('usStatusId')?.value) {
+      this.form.patchValue({ usStatusId: next });
     }
-
-    this.markAllTasksDone();
   }
 
   buildDraft(): Draft {
     const value = this.form.getRawValue();
     const tagPlan = value.tagPlan;
-    const parsed = parseUsDescription(value.usDescription);
 
     return {
       ...(this.draft as Draft),
       escopo: value.escopo,
       titulo: value.titulo,
-      contexto: parsed.contexto,
-      objetivo: parsed.objetivo,
-      criteriosAceite: parsed.criteriosAceite,
-      branch: parsed.branch || this.draft?.branch || '',
+      contexto: value.contexto,
+      objetivo: value.objetivo,
+      criteriosAceite: formatAcceptanceCriteria(value.criteriosAceite) || null,
+      branch: value.branch || this.draft?.branch || '',
       tagPlan,
       tagColors: this.tagColorOverrides,
       tags: flattenTagPlan(tagPlan),
       usStatusId: value.usStatusId,
       milestoneId: value.milestoneId,
-      tasks: value.tasks.map((task: { subject: string; description?: string; statusId: number; assignedTo?: number | null }) => ({
-        subject: task.subject,
-        description: task.description,
-        statusId: task.statusId,
-        assignedTo: isMergeTask(task.subject)
-          ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
-          : (task.assignedTo ?? this.defaultAssigneeId),
-      })),
+      tasks: value.tasks.map(
+        (task: { subject: string; description?: string; statusId: number; assignedTo?: number | null }) => ({
+          subject: task.subject,
+          description: task.description,
+          statusId: task.statusId,
+          assignedTo: isMergeTask(task.subject)
+            ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
+            : (task.assignedTo ?? this.defaultAssigneeId),
+        }),
+      ),
     };
   }
 
@@ -291,8 +248,18 @@ export class PublishedPanelComponent implements OnChanges {
       return;
     }
 
+    this.syncUsStatusFromTasks();
     const draft = this.buildDraft();
-    const rawTasks = this.form.getRawValue().tasks;
+    const rawTasks = this.form.getRawValue().tasks as Array<{
+      id?: number;
+      version?: number;
+      ref?: number;
+      url?: string;
+      subject: string;
+      description?: string;
+      statusId: number;
+      assignedTo?: number | null;
+    }>;
 
     this.save.emit({
       draft,
@@ -301,16 +268,21 @@ export class PublishedPanelComponent implements OnChanges {
         userStory: {
           ...this.publishResult.userStory,
           subject: `[${draft.escopo}] ${draft.titulo}`,
-          description: this.form.getRawValue().usDescription,
+          description: undefined,
           tags: draft.tags,
           statusId: draft.usStatusId ?? this.publishResult.userStory.statusId,
         },
-        tasks: this.publishResult.tasks.map((task, index) => ({
-          ...task,
-          subject: rawTasks[index].subject,
-          description: rawTasks[index].description ?? '',
-          statusId: rawTasks[index].statusId,
-          assignedTo: rawTasks[index].assignedTo ?? null,
+        tasks: rawTasks.map((task) => ({
+          id: task.id || 0,
+          version: task.version ?? 1,
+          ref: task.ref ?? 0,
+          url: task.url ?? '',
+          subject: task.subject,
+          description: task.description ?? '',
+          statusId: task.statusId,
+          assignedTo: isMergeTask(task.subject)
+            ? (this.mergeAssigneeId ?? task.assignedTo ?? null)
+            : (task.assignedTo ?? null),
         })),
       },
     });

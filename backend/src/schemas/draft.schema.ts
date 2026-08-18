@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { flattenTagPlan } from '../utils/tags.js';
+import { formatAcceptanceCriteria } from '../utils/acceptance-criteria.js';
 
 export const TASK_SUBJECT_REGEX = /^(\[[^\]]+\] )?[A-ZÁÉÍÓÚÂÊÔÃÕÇ].+/;
 export const US_SUBJECT_REGEX = /^\[.+\] .+/;
@@ -59,7 +60,15 @@ export const draftSchema = z.object({
   contextoGeral: z.string().min(1),
   contexto: z.string().min(1),
   objetivo: z.string().min(1),
-  criteriosAceite: z.string().nullable(),
+  criteriosAceite: z
+    .union([z.string(), z.array(z.string()), z.null()])
+    .transform((value) => {
+      if (value == null) {
+        return null;
+      }
+      const formatted = formatAcceptanceCriteria(value);
+      return formatted || null;
+    }),
   branch: z.string().min(1),
   tags: z.array(z.string()),
   tagPlan: structuredTagPlanSchema,
@@ -127,7 +136,7 @@ export const updatePublishedSchema = z.object({
   draft: draftSchema,
   tasks: z.array(
     z.object({
-      id: z.number(),
+      id: z.number().optional(),
       version: z.number().optional(),
       subject: z.string(),
       description: z.string().optional(),
@@ -148,7 +157,7 @@ export function buildUsSubject(escopo: string, titulo: string): string {
 export function buildUsDescription(
   draft: Pick<Draft, 'contexto' | 'objetivo' | 'criteriosAceite' | 'branch' | 'repositoryName'>,
 ): string {
-  const criterios = draft.criteriosAceite?.trim() ?? '';
+  const criterios = formatAcceptanceCriteria(draft.criteriosAceite);
   const repositorySection = draft.repositoryName?.trim()
     ? `\n\n(Repositório)\n${draft.repositoryName.trim()}`
     : '';

@@ -1,0 +1,40 @@
+<section class="login-page">
+  <div class="login-card">
+    <div class="brand">
+      <div class="logo">TA</div>
+      <div>
+        <h1>Taiga Agent</h1>
+        <p>Entre com sua conta Taiga</p>
+      </div>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" class="login-form">
+      <label class="field">
+        <span>Usuario / email</span>
+        <input
+          formControlName="username"
+          type="text"
+          autocomplete="username"
+          placeholder="voce@empresa.com"
+        />
+      </label>
+      <label class="field">
+        <span>Senha</span>
+        <input
+          formControlName="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Senha do Taiga"
+        />
+      </label>
+
+      @if (error) {
+        <p class="form-error" role="alert">{{ error }}</p>
+      }
+
+      <button type="submit" class="primary" [disabled]="submitting">
+        {{ submitting ? 'Entrando...' : 'Entrar' }}
+      </button>
+    </form>
+  </div>
+</section>

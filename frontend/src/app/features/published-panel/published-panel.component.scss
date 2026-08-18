@@ -36,6 +36,10 @@
   max-height: min(560px, calc(100vh - 300px));
 }
 
+.tasks-section {
+  min-height: 0;
+}
+
 .us-header-row {
   display: grid;
   grid-template-columns: 7.5rem 1fr;
@@ -163,6 +167,10 @@ select {
   color: var(--muted);
   font-size: 0.6875rem;
   line-height: 1.4;
+}
+
+.field--sprint {
+  max-width: 18rem;
 }
 
 .color-dot {

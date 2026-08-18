@@ -2,26 +2,31 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject, OnInit } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { Subject, of } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, switchMap, tap } from 'rxjs/operators';
+import { CriteriosEditorComponent } from '../../components/criterios-editor/criterios-editor.component';
+import { SelectComponent } from '../../components/select/select.component';
 import { ApiService } from '../../services/api.service';
+import { ToastService } from '../../services/toast.service';
 import {
   BRANCH_PREFIXES,
   GenerationMode,
   GenerateRequest,
   ProjectMeta,
+  UserStorySearchResult,
 } from '../../models/draft.models';
 
 @Component({
   selector: 'app-draft-form',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, SelectComponent, CriteriosEditorComponent],
   templateUrl: './draft-form.component.html',
   styleUrl: './draft-form.component.scss',
 })
 export class DraftFormComponent implements OnInit, OnChanges {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ApiService);
+  private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly branchSearch$ = new Subject<{ query: string; codebaseId?: number | null }>();
   private readonly usSearch$ = new Subject<string>();
@@ -30,10 +35,13 @@ export class DraftFormComponent implements OnInit, OnChanges {
   @Input() loading = false;
   @Output() generate = new EventEmitter<GenerateRequest>();
   @Output() openExisting = new EventEmitter<number>();
+  @Output() createManual = new EventEmitter<GenerateRequest>();
 
   activeTab: 'basico' | 'detalhes' = 'basico';
-  searchResults: Array<{ id: number; ref: number; subject: string }> = [];
+  searchResults: UserStorySearchResult[] = [];
   usSuggestionsOpen = false;
+  usSearchQuery = '';
+  usSearchError = '';
   branchResults: string[] = [];
   branchSuggestionsField: 'branch' | 'compareBase' | null = null;
   selectedBranchPrefix = 'feat';
@@ -84,7 +92,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
       .pipe(
         debounceTime(300),
         distinctUntilChanged(),
-        switchMap((query) => this.api.searchUserStories(query)),
+        switchMap((query) => this.searchUserStories(query)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((results) => {
@@ -125,6 +133,14 @@ export class DraftFormComponent implements OnInit, OnChanges {
       return Boolean(codebase.hasGitlabToken && codebase.gitlabProjectId);
     }
     return Boolean(this.meta?.gitlabConfigured);
+  }
+
+  get codebaseOptions() {
+    const codebases = this.meta?.codebases ?? [];
+    if (!codebases.length) {
+      return [{ value: null, label: 'Nenhum repositorio cadastrado' }];
+    }
+    return codebases.map((codebase) => ({ value: codebase.id, label: codebase.name }));
   }
 
   get submitLabel(): string {
@@ -200,7 +216,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
 
   onUsAutocompleteFocus(): void {
     this.usSuggestionsOpen = true;
-    this.fetchUsSuggestionsNow(this.form.controls.existingUserStoryTitle.value.trim());
+    this.queueUsSuggestions(this.form.controls.existingUserStoryTitle.value.trim());
   }
 
   onUsAutocompleteInput(): void {
@@ -215,16 +231,34 @@ export class DraftFormComponent implements OnInit, OnChanges {
   }
 
   private queueUsSuggestions(query: string): void {
-    this.usSearch$.next(query);
+    this.usSearchQuery = query.trim();
+    this.usSearchError = '';
+    if (!this.usSearchQuery) {
+      this.searchResults = [];
+    }
+    this.usSearch$.next(this.usSearchQuery);
   }
 
-  private fetchUsSuggestionsNow(query: string): void {
-    this.api.searchUserStories(query).subscribe((results) => {
-      this.searchResults = results;
-    });
+  private searchUserStories(query: string) {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      this.usSearchError = '';
+      return of([] as UserStorySearchResult[]);
+    }
+
+    return this.api.searchUserStories(trimmed).pipe(
+      tap(() => {
+        this.usSearchError = '';
+      }),
+      catchError((err) => {
+        this.usSearchError = err?.error?.error ?? 'Falha ao buscar user stories no Taiga.';
+        this.toast.show(this.usSearchError);
+        return of([] as UserStorySearchResult[]);
+      }),
+    );
   }
 
-  selectUserStory(us: { id: number; ref: number; subject: string }): void {
+  selectUserStory(us: UserStorySearchResult): void {
     this.form.patchValue({
       existingUserStoryRef: String(us.ref),
       existingUserStoryTitle: us.subject,
@@ -292,6 +326,10 @@ export class DraftFormComponent implements OnInit, OnChanges {
     this.branchSuggestionsField = null;
   }
 
+  emitManual(): void {
+    this.createManual.emit(this.buildGenerateRequest());
+  }
+
   submit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
@@ -311,6 +349,11 @@ export class DraftFormComponent implements OnInit, OnChanges {
       return;
     }
 
+    this.generate.emit(this.buildGenerateRequest());
+  }
+
+  private buildGenerateRequest(): GenerateRequest {
+    const value = this.form.getRawValue();
     const existingRef = value.existingUserStoryRef
       ? Number.parseInt(value.existingUserStoryRef, 10)
       : undefined;
@@ -323,8 +366,8 @@ export class DraftFormComponent implements OnInit, OnChanges {
     const enrichWithGitlab = this.gitlabConfigured && Boolean(branch);
     const codebase = this.selectedCodebase;
 
-    this.generate.emit({
-      mode: value.mode,
+    return {
+      mode: value.mode === 'existing_us' ? 'new_us' : value.mode,
       escopo: value.escopo || undefined,
       titulo: value.titulo || undefined,
       contextoGeral: value.contextoGeral,
@@ -339,6 +382,6 @@ export class DraftFormComponent implements OnInit, OnChanges {
       existingUserStoryRef: Number.isFinite(existingRef) ? existingRef : undefined,
       codebaseId: value.codebaseId ?? undefined,
       repositoryName: codebase?.name,
-    });
+    };
   }
 }

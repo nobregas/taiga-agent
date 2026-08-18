@@ -1,54 +1,91 @@
-<div class="app">
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="logo">TA</div>
-      <div>
-        <h1>Taiga Agent</h1>
-        <p>US + tasks com IA</p>
-      </div>
-    </div>
-
-    <nav class="sidebar-nav">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Wizard</a>
-      <a routerLink="/workspaces" routerLinkActive="active">Workspaces</a>
-      <a routerLink="/settings" routerLinkActive="active">Configuracoes</a>
-    </nav>
-
-    @if (workspaces.length) {
-      <label class="workspace-switch">
-        <span>Workspace</span>
-        <select
-          [value]="meta?.workspaceId ?? ''"
-          [disabled]="switchingWorkspace"
-          (change)="onWorkspaceChange($event)"
-        >
-          @for (workspace of workspaces; track workspace.id) {
-            <option [value]="workspace.id" [selected]="workspace.id === meta?.workspaceId">
-              {{ workspace.name }}
-            </option>
+@if (isLoginRoute) {
+  <router-outlet />
+} @else {
+  <div class="app">
+    <header class="app-header">
+      <div class="app-header__title">Taiga Agent</div>
+      <div class="user-menu" (click)="$event.stopPropagation()">
+        @if (auth.authenticated()) {
+          <button
+            type="button"
+            class="user-ball"
+            [attr.aria-expanded]="userMenuOpen"
+            aria-haspopup="menu"
+            aria-label="Menu do usuario"
+            (click)="toggleUserMenu($event)"
+          >
+            @if (auth.user()?.photo && !avatarBroken) {
+              <img [src]="auth.user()?.photo" alt="" (error)="onAvatarError()" />
+            } @else {
+              <span>{{ auth.userInitials() }}</span>
+            }
+          </button>
+          @if (userMenuOpen) {
+            <div class="user-dropdown" role="menu">
+              <div class="user-dropdown__identity">
+                <strong>{{ auth.user()?.full_name || auth.displayEmail() }}</strong>
+                @if (auth.displayEmail()) {
+                  <small>{{ auth.displayEmail() }}</small>
+                }
+              </div>
+              <a routerLink="/settings" role="menuitem" (click)="closeUserMenu()">Configuracoes</a>
+              <button type="button" role="menuitem" (click)="logout()">Sair</button>
+            </div>
           }
-        </select>
-      </label>
-    }
-
-    @if (meta) {
-      <div class="meta-card">
-        <small>Projeto</small>
-        <strong>{{ meta.projectSlug }}</strong>
-        @if (meta.currentUser) {
-          <small>Assignee: {{ meta.currentUser.full_name }}</small>
+        } @else {
+          <a routerLink="/login" class="login-link">Entrar</a>
         }
-        <div class="status-row">
-          <span [class.on]="meta.geminiConfigured">Gemini</span>
-          <span [class.on]="meta.gitlabConfigured">GitLab</span>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">TA</div>
+        <div>
+          <h1>Taiga Agent</h1>
+          <p>US + tasks com IA</p>
         </div>
       </div>
-    }
-  </aside>
 
-  <main class="main">
-    <router-outlet />
-  </main>
-</div>
+      <nav class="sidebar-nav">
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Wizard</a>
+        <a routerLink="/workspaces" routerLinkActive="active">Workspaces</a>
+        <a routerLink="/settings" routerLinkActive="active">Configuracoes</a>
+      </nav>
+
+      @if (workspaces.length) {
+        <label class="workspace-switch">
+          <span>Workspace</span>
+          <app-select
+            [value]="meta?.workspaceId ?? null"
+            [options]="workspaceOptions"
+            [disabled]="switchingWorkspace"
+            placeholder="Workspace"
+            ariaLabel="Workspace"
+            (valueChange)="onWorkspaceIdChange($event)"
+          />
+        </label>
+      }
+
+      @if (meta) {
+        <div class="meta-card">
+          <small>Projeto</small>
+          <strong>{{ meta.projectSlug }}</strong>
+          @if (meta.currentUser) {
+            <small>Assignee: {{ meta.currentUser.full_name }}</small>
+          }
+          <div class="status-row">
+            <span [class.on]="meta.geminiConfigured">Gemini</span>
+            <span [class.on]="meta.gitlabConfigured">GitLab</span>
+          </div>
+        </div>
+      }
+    </aside>
+
+    <main class="main">
+      <router-outlet />
+    </main>
+  </div>
+}
 
 <app-toast />

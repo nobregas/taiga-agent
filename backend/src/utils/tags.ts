@@ -1,3 +1,5 @@
+import { isReasonableNewTagName } from './acceptance-criteria.js';
+
 export interface StructuredTagPlan {
   aplicacao: string;
   escopo: string;
@@ -151,34 +153,45 @@ export function constrainToExistingTag(name: string, existingTags: string[], fal
   );
 }
 
+export function resolveTagName(name: string, existingTags: string[], fallback?: string): string {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) {
+    return fallback ? resolveTagName(fallback, existingTags) : (existingTags[0] ?? 'geral');
+  }
+
+  const existing = fuzzyMatchTag(normalized, existingTags);
+  if (existing) {
+    return existing;
+  }
+
+  if (!existingTags.length || isReasonableNewTagName(normalized)) {
+    return normalized.replace(/\s+/g, '-');
+  }
+
+  return constrainToExistingTag(normalized, existingTags, fallback);
+}
+
+export function resolveTagPlanAllowingNew(
+  plan: StructuredTagPlan,
+  existingTags: string[],
+): StructuredTagPlan {
+  return {
+    aplicacao: resolveTagName(plan.aplicacao, existingTags, 'app'),
+    escopo: resolveTagName(plan.escopo, existingTags, 'front'),
+    tipo: resolveTagName(plan.tipo, existingTags, 'feature'),
+    dominio: resolveTagName(plan.dominio, existingTags, 'geral'),
+  };
+}
+
 export function constrainTagPlanToBank(
   plan: StructuredTagPlan,
   existingTags: string[],
 ): StructuredTagPlan {
-  if (!existingTags.length) {
-    return {
-      aplicacao: plan.aplicacao.trim().toLowerCase(),
-      escopo: plan.escopo.trim().toLowerCase(),
-      tipo: plan.tipo.trim().toLowerCase(),
-      dominio: plan.dominio.trim().toLowerCase(),
-    };
-  }
-
-  return {
-    aplicacao: constrainToExistingTag(plan.aplicacao, existingTags, 'app'),
-    escopo: constrainToExistingTag(plan.escopo, existingTags, 'front'),
-    tipo: constrainToExistingTag(plan.tipo, existingTags, 'feature'),
-    dominio: constrainToExistingTag(plan.dominio, existingTags, 'geral'),
-  };
+  return resolveTagPlanAllowingNew(plan, existingTags);
 }
 
-export function buildTagEnumSchema(existingTags: string[]): { type: 'string'; enum: string[] } | { type: 'string' } {
-  const unique = [...new Set(existingTags.map((tag) => tag.trim()).filter(Boolean))];
-  if (unique.length === 0 || unique.length > 180) {
-    return { type: 'string' };
-  }
-
-  return { type: 'string', enum: unique };
+export function buildTagStringSchema(): { type: 'string' } {
+  return { type: 'string' };
 }
 
 export function preferExistingTagNames(

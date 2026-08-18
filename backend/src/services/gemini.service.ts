@@ -11,12 +11,13 @@ import type { TaigaProjectMeta } from './taiga.service.js';
 import { buildSystemPrompt } from '../utils/template.js';
 import type { GenerateRequest } from '../schemas/draft.schema.js';
 import { defaultOpenStatusId, findDoneStatusId } from '../utils/task-status.js';
-import { buildTagEnumSchema, constrainTagPlanToBank, mergeTagColors } from '../utils/tags.js';
+import { buildTagStringSchema, mergeTagColors, resolveTagPlanAllowingNew } from '../utils/tags.js';
+import { formatAcceptanceCriteria } from '../utils/acceptance-criteria.js';
 import { ensureDefaultFinalTasks } from '../utils/default-tasks.js';
 import { runtimeConfig } from './runtime-config.service.js';
 
-function buildAiResponseSchema(existingTags: string[]) {
-  const tagValue = buildTagEnumSchema(existingTags);
+function buildAiResponseSchema() {
+  const tagValue = buildTagStringSchema();
 
   return {
     type: 'object',
@@ -26,7 +27,7 @@ function buildAiResponseSchema(existingTags: string[]) {
       contextoGeral: { type: 'string' },
       contexto: { type: 'string' },
       objetivo: { type: 'string' },
-      criteriosAceite: { type: ['string', 'null'] },
+      criteriosAceite: { type: 'array', items: { type: 'string' } },
       branch: { type: 'string' },
       tagPlan: {
         type: 'object',
@@ -140,10 +141,13 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
     }
 
     if (meta.tags.length) {
-      parts.push('Escolha tags SOMENTE do banco fechado do system prompt. NUNCA invente nomes.');
+      parts.push(
+        'Prefira tags do banco compacto do system prompt. Crie tag nova SOMENTE se nenhum nome existente servir.',
+      );
     } else {
       parts.push('Projeto sem tags cadastradas — crie tagPlan com nomes curtos.');
     }
+    parts.push('criteriosAceite deve ser um array de strings, um criterio por item, sem numeracao.');
     parts.push(
       `Prefixo de branch preferido pelo usuario: ${prefix} (pode mudar se fix/test/chore/hotfix for mais adequado)`,
     );
@@ -179,7 +183,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       config: {
         systemInstruction: buildSystemPrompt(meta.tags, codebaseId ?? request.codebaseId),
         responseMimeType: 'application/json',
-        responseSchema: buildAiResponseSchema(meta.tags),
+        responseSchema: buildAiResponseSchema(),
         temperature: 0.4,
       },
     });
@@ -192,7 +196,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
     const parsed = JSON.parse(text) as Draft;
     const escopo = parsed.escopo || request.escopo || 'App';
     const titulo = parsed.titulo || request.titulo || 'Nova user story';
-    const tagPlan = constrainTagPlanToBank(parsed.tagPlan, meta.tags);
+    const tagPlan = resolveTagPlanAllowingNew(parsed.tagPlan, meta.tags);
 
     const draft = draftSchema.parse({
       ...parsed,
@@ -204,7 +208,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       existingUserStoryRef: request.existingUserStoryRef,
       codebaseId: codebase?.id ?? codebaseId ?? request.codebaseId,
       repositoryName: codebase?.name ?? request.repositoryName,
-      criteriosAceite: parsed.criteriosAceite ?? null,
+      criteriosAceite: formatAcceptanceCriteria(parsed.criteriosAceite ?? request.criteriosAceite) || null,
       branch: normalizeBranch(
         parsed.branch || request.branch || `${prefix}/${slugifyBranch(titulo)}`,
         prefix,

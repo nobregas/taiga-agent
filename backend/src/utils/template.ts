@@ -58,16 +58,17 @@ export function buildSystemPrompt(existingTags: string[], codebaseId?: number | 
   const closedTagBank = existingTags.map((tag) => tag.trim()).filter(Boolean);
   const tagsSection =
     closedTagBank.length > 0
-      ? `## Tags (lista fechada)
+      ? `## Tags
 Gere tagPlan com 4 campos (aplicacao, escopo, tipo, dominio).
 Slots:
 ${tagStructure}
 
-BANCO DO PROJETO (unicos nomes permitidos): ${closedTagBank.join(',')}
+BANCO DO PROJETO (prefira estes nomes): ${closedTagBank.join(',')}
 Regras:
-- Escolha SOMENTE nomes deste banco, copiados exatamente
-- Se nenhum servir, escolha o mais proximo do banco
-- NUNCA invente tag nova, NUNCA traduza, NUNCA crie sinonimo
+- Prefira copiar exatamente um nome deste banco
+- So crie uma tag NOVA se nenhum nome existente servir razoavelmente
+- Nova tag: nome curto (minusculo, 1-3 tokens, sem pontuacao)
+- Nao traduza tags existentes nem invente sinonimo se o banco ja cobre
 - tags = os 4 nomes escolhidos na ordem dos slots
 - Nao envie tagColors; o sistema reutiliza as cores do Taiga`
       : `## Tags estruturadas (obrigatorio)
@@ -89,6 +90,14 @@ ${template.us.description_template}
 ${template.us.contexto_rules ?? 'Texto enxuto sobre o estado atual do app.'}
 - contextoGeral = briefing do usuario — NAO copiar para contexto
 - contexto = resumo curto do estado atual do produto
+
+### Criterios de aceite
+- criteriosAceite: array de strings (um criterio por item)
+- Cada item vira uma linha com prefixo "- "
+- Exemplo interno: ["Login persiste sessao", "Erro aparece no formulario"]
+- Exemplo publicado:
+  - Login persiste sessao
+  - Erro aparece no formulario
 
 ### Branch
 - Prefixos validos: ${prefixes}

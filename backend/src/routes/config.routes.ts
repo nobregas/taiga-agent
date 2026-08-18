@@ -41,9 +41,7 @@ configRouter.get('/meta', async (_req, res) => {
       gitlabConfigured: runtimeConfig.isGitlabConfigured(defaultCodebaseId),
       defaultGitlabBaseBranch: runtimeConfig.getGitlabConfig(defaultCodebaseId).defaultBase,
       geminiConfigured: Boolean(settings.geminiApiKey),
-      settingsConfigured: Boolean(
-        settings.geminiApiKey && (settings.taigaToken || (settings.taigaUsername && settings.taigaPassword)),
-      ),
+      settingsConfigured: Boolean(settings.geminiApiKey && runtimeConfig.isTaigaAuthenticated()),
       hasActiveWorkspace: Boolean(workspace),
       hasDefaultCodebase: Boolean(defaultCodebase),
     });
@@ -69,9 +67,7 @@ configRouter.get('/meta', async (_req, res) => {
       gitlabConfigured: runtimeConfig.isGitlabConfigured(defaultCodebaseId),
       defaultGitlabBaseBranch: runtimeConfig.getGitlabConfig(defaultCodebaseId).defaultBase,
       geminiConfigured: Boolean(settings.geminiApiKey),
-      settingsConfigured: Boolean(
-        settings.geminiApiKey && (settings.taigaToken || (settings.taigaUsername && settings.taigaPassword)),
-      ),
+      settingsConfigured: Boolean(settings.geminiApiKey && runtimeConfig.isTaigaAuthenticated()),
       hasActiveWorkspace: Boolean(workspace),
       hasDefaultCodebase: Boolean(defaultCodebase),
       warning: error instanceof Error ? error.message : 'Taiga metadata unavailable',
@@ -142,18 +138,15 @@ configRouter.get('/userstories/search', async (req, res, next) => {
   try {
     runtimeConfig.assertTaigaConfigured();
     const query = String(req.query.q ?? '').trim();
-    const results = query
-      ? await taigaService.searchUserStories(query)
-      : await taigaService.listRecentUserStories(20);
+    if (!query) {
+      res.json([]);
+      return;
+    }
 
-    res.json(
-      results.slice(0, 20).map((us) => ({
-        id: us.id,
-        ref: us.ref,
-        subject: us.subject,
-      })),
-    );
+    const results = await taigaService.searchUserStories(query);
+    res.json(results.slice(0, 20));
   } catch (error) {
+    console.error('[userstories/search] Falha ao buscar US no Taiga', error);
     next(error);
   }
 });
@@ -167,6 +160,7 @@ configRouter.get('/userstories/recent', async (_req, res, next) => {
         id: us.id,
         ref: us.ref,
         subject: us.subject,
+        status: us.status,
       })),
     );
   } catch (error) {

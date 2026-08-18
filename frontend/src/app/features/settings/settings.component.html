@@ -3,7 +3,7 @@
     <div>
       <a routerLink="/" class="back-link">← Voltar</a>
       <h2>Configuracoes</h2>
-      <p>Credenciais globais compartilhadas entre todos os workspaces</p>
+      <p>URL da API, token opcional e preferencias globais</p>
     </div>
   </header>
 
@@ -13,21 +13,12 @@
     <form [formGroup]="form" (ngSubmit)="submit()" class="panel">
       <h3>Taiga</h3>
       <label class="field">
+        <span>Email</span>
+        <input [value]="auth.displayEmail()" type="email" readonly />
+      </label>
+      <label class="field">
         <span>URL da API</span>
         <input formControlName="taigaUrl" />
-      </label>
-      <label class="field">
-        <span>Email / usuario</span>
-        <input formControlName="taigaUsername" autocomplete="username" />
-      </label>
-      <label class="field">
-        <span>Senha</span>
-        <input
-          type="password"
-          formControlName="taigaPassword"
-          [placeholder]="settings?.hasTaigaPassword ? 'Deixe em branco para manter' : 'Senha Taiga'"
-          autocomplete="current-password"
-        />
       </label>
       <label class="field">
         <span>Token (opcional)</span>

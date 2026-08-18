@@ -7,7 +7,112 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: 240px 1fr;
+  grid-template-rows: 56px 1fr;
   background: var(--bg);
+}
+
+.app-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-header__title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.user-menu {
+  position: relative;
+}
+
+.user-ball {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 0;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.user-ball img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.login-link {
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.user-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 0.35rem;
+  display: grid;
+}
+
+.user-dropdown__identity {
+  padding: 0.45rem 0.6rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.25rem;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.user-dropdown__identity strong {
+  font-size: 0.8125rem;
+}
+
+.user-dropdown__identity small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.user-dropdown a,
+.user-dropdown button {
+  text-align: left;
+  text-decoration: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.user-dropdown a:hover,
+.user-dropdown button:hover {
+  background: var(--surface-muted);
 }
 
 .sidebar {
@@ -172,16 +277,13 @@
   color: var(--muted);
 }
 
-.workspace-switch select {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.65rem;
-  background: var(--surface);
+.workspace-switch app-select {
+  width: 100%;
 }
 
 .main {
   padding: 1.25rem 1.5rem 1.5rem;
-  min-height: 100vh;
+  min-height: 0;
   align-content: start;
 }
 
@@ -280,6 +382,7 @@
 @media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: 56px auto 1fr;
   }
 
   .sidebar {

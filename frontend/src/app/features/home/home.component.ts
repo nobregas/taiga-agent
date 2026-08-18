@@ -23,6 +23,7 @@ import {
   ProjectMeta,
   PublishResponse,
   WizardStep,
+  buildManualDraft,
 } from '../../models/draft.models';
 
 @Component({
@@ -144,10 +145,27 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  generateStepState(index: number): 'done' | 'current' | 'pending' {
+  generateStepState(index: number): 'done' | 'current' | 'pending' | 'error' {
+    if (this.generateError) {
+      if (index < this.generateStepIndex) return 'done';
+      if (index === this.generateStepIndex) return 'error';
+      return 'pending';
+    }
+
     if (index < this.generateStepIndex) return 'done';
     if (index === this.generateStepIndex) return 'current';
     return 'pending';
+  }
+
+  openManualDraft(seed?: GenerateRequest | null): void {
+    this.generateSub?.unsubscribe();
+    this.clearGenerateTimers();
+    this.loading = false;
+    this.draft = buildManualDraft(this.meta, seed ?? this.lastGenerateRequest);
+    this.branchContext = null;
+    this.publishResult = null;
+    this.step = 'review';
+    this.closeGenerateModal();
   }
 
   onOpenExisting(ref: number): void {
@@ -196,7 +214,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         userStoryVersion: payload.publishResult.userStory.version,
         draft: payload.draft,
         tasks: payload.publishResult.tasks.map((task) => ({
-          id: task.id,
+          id: task.id || undefined,
           version: task.version,
           subject: task.subject,
           description: task.description,

@@ -1,0 +1,30 @@
+<div class="criterios" role="list" aria-label="Criterios de aceite">
+  @for (line of lines; track $index) {
+    <div class="criterios__row" role="listitem">
+      <span class="criterios__bullet" aria-hidden="true">-</span>
+      <input
+        #lineInput
+        class="criterios__input"
+        [value]="line"
+        [disabled]="disabled"
+        (input)="onLineInput($index, $event)"
+        (keydown)="onLineKeydown($index, $event)"
+        (blur)="markTouched()"
+        [attr.aria-label]="'Criterio ' + ($index + 1)"
+        placeholder="criterio"
+      />
+      <button
+        type="button"
+        class="criterios__remove"
+        [disabled]="disabled || lines.length === 1"
+        (click)="removeLine($index)"
+        [attr.aria-label]="'Remover criterio ' + ($index + 1)"
+      >
+        ×
+      </button>
+    </div>
+  }
+  <button type="button" class="criterios__add" [disabled]="disabled" (click)="addLine()">
+    Adicionar criterio
+  </button>
+</div>

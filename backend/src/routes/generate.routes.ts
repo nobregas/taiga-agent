@@ -6,6 +6,7 @@ import { gitlabService } from '../services/gitlab.service.js';
 import { runtimeConfig } from '../services/runtime-config.service.js';
 import { taigaService } from '../services/taiga.service.js';
 import { ensureDefaultFinalTasks } from '../utils/default-tasks.js';
+import { areAllTasksComplete, resolveUserStoryStatusId } from '../utils/task-status.js';
 
 export const generateRouter = Router();
 
@@ -58,6 +59,11 @@ generateRouter.post('/', async (req, res, next) => {
     draft.tasks = ensureDefaultFinalTasks(draft.tasks, {
       defaultAssigneeId: meta.currentUser?.id ?? null,
       mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
+    });
+
+    draft.usStatusId = resolveUserStoryStatusId(meta.userStoryStatuses, {
+      allTasksComplete: areAllTasksComplete(draft.tasks, meta.taskStatuses),
+      preferredId: draft.usStatusId,
     });
 
     if (draft.milestoneId == null && meta.defaultSprintId) {

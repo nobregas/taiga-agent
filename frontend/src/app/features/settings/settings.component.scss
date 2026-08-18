@@ -51,6 +51,12 @@
   background: var(--surface);
 }
 
+.field input[readonly] {
+  background: var(--surface-muted);
+  color: var(--text);
+  cursor: default;
+}
+
 .primary {
   margin-top: 0.5rem;
   border: none;

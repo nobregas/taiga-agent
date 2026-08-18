@@ -111,6 +111,7 @@ export interface TaigaUser {
   id: number;
   username: string;
   full_name: string;
+  email?: string | null;
   photo?: string | null;
 }
 
@@ -176,6 +177,7 @@ export interface UserStorySearchResult {
   id: number;
   ref: number;
   subject: string;
+  status?: number | string;
 }
 
 export interface UserStoryEditResponse {
@@ -216,7 +218,7 @@ export interface UpdatePublishedRequest {
   userStoryVersion?: number;
   draft: Draft;
   tasks: Array<{
-    id: number;
+    id?: number;
     version?: number;
     subject: string;
     description?: string;
@@ -285,10 +287,26 @@ export function tagColorFor(
   );
 }
 
+export function parseAcceptanceCriteria(value: string | string[] | null | undefined): string[] {
+  if (value == null) {
+    return [];
+  }
+
+  const lines = Array.isArray(value) ? value : value.split(/\r?\n/);
+  return lines
+    .map((line) => line.replace(/^\s*[-*]\s+/, '').replace(/^\s*[-*]\s*$/, '').trim())
+    .filter(Boolean);
+}
+
+export function formatAcceptanceCriteria(value: string | string[] | null | undefined): string {
+  const items = parseAcceptanceCriteria(value);
+  return items.map((item) => `- ${item}`).join('\n');
+}
+
 export function buildUsDescription(
   draft: Pick<Draft, 'contexto' | 'objetivo' | 'criteriosAceite' | 'branch' | 'repositoryName'>,
 ): string {
-  const criterios = draft.criteriosAceite?.trim() ?? '';
+  const criterios = formatAcceptanceCriteria(draft.criteriosAceite);
   const repositorySection = draft.repositoryName?.trim()
     ? `\n\n(Repositório)\n${draft.repositoryName.trim()}`
     : '';
@@ -330,7 +348,7 @@ export function parseUsDescription(description: string): {
   return {
     contexto: sections['contexto'] ?? '',
     objetivo: sections['objetivo'] ?? '',
-    criteriosAceite: criterios || null,
+    criteriosAceite: formatAcceptanceCriteria(criterios) || null,
     branch: sections['branch'] ?? '',
   };
 }
@@ -339,32 +357,118 @@ export function defaultOpenStatusId(statuses: TaigaStatus[]): number | undefined
   return statuses.find((status) => !status.is_closed)?.id ?? statuses[0]?.id;
 }
 
+const READY_FOR_DEV_ALIASES = [
+  'ready-for-dev',
+  'ready_for_dev',
+  'ready-for-development',
+  'ready for dev',
+  'ready for development',
+  'pronta para dev',
+  'pronto para dev',
+  'pronta para desenvolvimento',
+  'pronto para desenvolvimento',
+  'readyfordev',
+];
+
+const READY_ONLY_ALIASES = ['ready', 'pronta', 'pronto'];
+const RELEASED_ALIASES = ['released', 'release', 'lancado', 'publicado'];
+const DONE_ALIASES = ['done', 'closed', 'concluido', 'concluído', 'finalizado'];
+
+function normalizeStatusText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_/]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function statusMatches(status: TaigaStatus, aliases: string[]): boolean {
+  const slug = normalizeStatusText(status.slug).replace(/ /g, '-');
+  const name = normalizeStatusText(status.name);
+  const nameDashed = name.replace(/ /g, '-');
+
+  return aliases.some((alias) => {
+    const normalized = normalizeStatusText(alias);
+    const dashed = normalized.replace(/ /g, '-');
+    return slug === dashed || name === normalized || nameDashed === dashed;
+  });
+}
+
+export function findStatusByAliases(statuses: TaigaStatus[], aliases: string[]): TaigaStatus | undefined {
+  return statuses.find((status) => statusMatches(status, aliases));
+}
+
+export function findReadyForDevStatusId(statuses: TaigaStatus[]): number | undefined {
+  const exact = findStatusByAliases(statuses, READY_FOR_DEV_ALIASES);
+  if (exact) {
+    return exact.id;
+  }
+
+  const readyOnly = findStatusByAliases(statuses, READY_ONLY_ALIASES);
+  if (readyOnly) {
+    return readyOnly.id;
+  }
+
+  return defaultOpenStatusId(statuses);
+}
+
+export function findReleasedOrDoneUsStatusId(statuses: TaigaStatus[]): number | undefined {
+  const released = findStatusByAliases(statuses, RELEASED_ALIASES);
+  if (released) {
+    return released.id;
+  }
+
+  const done = findStatusByAliases(statuses, DONE_ALIASES);
+  if (done) {
+    return done.id;
+  }
+
+  return statuses.find((status) => status.is_closed)?.id;
+}
+
 export function findDoneStatusId(statuses: TaigaStatus[]): number | undefined {
-  const done = statuses.find(
-    (status) =>
-      status.is_closed ||
-      status.slug === 'done' ||
-      status.slug === 'closed' ||
-      status.name.toLowerCase() === 'done' ||
-      status.name.toLowerCase() === 'closed' ||
-      status.name.toLowerCase() === 'concluído' ||
-      status.name.toLowerCase() === 'concluido',
-  );
-  return done?.id;
+  const named = findStatusByAliases(statuses, DONE_ALIASES);
+  if (named) {
+    return named.id;
+  }
+
+  return statuses.find((status) => status.is_closed)?.id;
 }
 
 export function isDoneStatus(statusId: number, statuses: TaigaStatus[]): boolean {
   const status = statuses.find((item) => item.id === statusId);
   if (!status) return false;
+  return status.is_closed || statusMatches(status, DONE_ALIASES);
+}
+
+export function areAllTasksComplete(
+  tasks: Array<{ statusId?: number; branchComplete?: boolean }>,
+  statuses: TaigaStatus[],
+): boolean {
   return (
-    status.is_closed ||
-    status.slug === 'done' ||
-    status.slug === 'closed' ||
-    status.name.toLowerCase() === 'done' ||
-    status.name.toLowerCase() === 'closed' ||
-    status.name.toLowerCase() === 'concluído' ||
-    status.name.toLowerCase() === 'concluido'
+    tasks.length > 0 &&
+    tasks.every((task) => Boolean(task.branchComplete) || isDoneStatus(task.statusId ?? -1, statuses))
   );
+}
+
+export function resolveUserStoryStatusId(
+  statuses: TaigaStatus[],
+  options: { allTasksComplete: boolean; preferredId?: number },
+): number | undefined {
+  if (options.allTasksComplete) {
+    return findReleasedOrDoneUsStatusId(statuses) ?? options.preferredId ?? findReadyForDevStatusId(statuses);
+  }
+
+  const readyId = findReadyForDevStatusId(statuses);
+  const closedId = findReleasedOrDoneUsStatusId(statuses);
+
+  if (options.preferredId && options.preferredId !== closedId) {
+    return options.preferredId;
+  }
+
+  return readyId ?? options.preferredId;
 }
 
 export function openTaskStatuses(statuses: TaigaStatus[]): TaigaStatus[] {
@@ -436,7 +540,98 @@ export function memberDisplayName(user: TaigaUser | null | undefined): string {
   if (!user) {
     return 'Sem responsavel';
   }
-  return user.full_name?.trim() || user.username;
+
+  const fullName = user.full_name?.trim();
+  if (fullName && !/^\d+$/.test(fullName)) {
+    return fullName;
+  }
+
+  const username = user.username?.trim();
+  if (username && !/^\d+$/.test(username)) {
+    return username;
+  }
+
+  return 'Membro';
+}
+
+export function memberLabelById(userId: number | null | undefined, members: TaigaUser[]): string {
+  if (userId == null) {
+    return 'Sem responsavel';
+  }
+
+  const member = members.find((item) => item.id === userId);
+  return memberDisplayName(member ?? undefined) === 'Sem responsavel'
+    ? 'Membro'
+    : memberDisplayName(member);
+}
+
+export function slugifyBranchTitle(title: string): string {
+  return (
+    title
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'nova-user-story'
+  );
+}
+
+export function buildManualDraft(
+  meta: ProjectMeta | null,
+  seed?: Partial<GenerateRequest> | null,
+): Draft {
+  const tags = meta?.tags ?? [];
+  const pickTag = (preferred: string, index: number) =>
+    findExistingTag(preferred, tags) ?? tags[index] ?? preferred;
+
+  const escopo = seed?.escopo?.trim() || 'App';
+  const titulo = seed?.titulo?.trim() || 'Nova user story';
+  const contextoGeral = seed?.contextoGeral?.trim() || 'A definir';
+  const prefix = seed?.branchPrefix ?? 'feat';
+  const branch = seed?.branch?.trim() || `${prefix}/${slugifyBranchTitle(titulo)}`;
+  const defaultAssigneeId = meta?.currentUser?.id ?? null;
+  const mergeAssigneeId = meta?.mergeAssigneeId ?? null;
+
+  const callTasks = (seed?.tasksFromCall ?? '')
+    .split('\n')
+    .map((line) => line.replace(/^[-*]\s*/, '').trim())
+    .filter(Boolean)
+    .map((subject) => ({
+      subject: /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ\[]/.test(subject) ? subject : `[Geral] ${subject}`,
+      description: '',
+      assignedTo: defaultAssigneeId,
+    }));
+
+  const tagPlan = {
+    aplicacao: pickTag('app', 0),
+    escopo: pickTag('front', 1),
+    tipo: pickTag('feature', 2),
+    dominio: pickTag('geral', 3),
+  };
+
+  const tasks = ensureDefaultFinalTasks(callTasks, { defaultAssigneeId, mergeAssigneeId });
+  const usStatusId = resolveUserStoryStatusId(meta?.userStoryStatuses ?? [], {
+    allTasksComplete: areAllTasksComplete(tasks, meta?.taskStatuses ?? []),
+  });
+
+  return {
+    escopo,
+    titulo,
+    contextoGeral,
+    contexto: 'A definir.',
+    objetivo: seed?.objetivo?.trim() || titulo,
+    criteriosAceite: formatAcceptanceCriteria(seed?.criteriosAceite) || '- ',
+    branch,
+    tags: flattenTagPlan(tagPlan),
+    tagPlan,
+    tagColors: {},
+    usStatusId,
+    milestoneId: meta?.defaultSprintId ?? null,
+    tasks,
+    mode: seed?.mode === 'existing_us' ? 'new_us' : (seed?.mode ?? 'new_us'),
+    codebaseId: seed?.codebaseId,
+    repositoryName: seed?.repositoryName,
+  };
 }
 
 export function ensureDefaultFinalTasks(

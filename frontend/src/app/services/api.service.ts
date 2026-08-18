@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
 import {
   BranchContextPreview,
   Draft,
@@ -15,6 +15,7 @@ import {
 } from '../models/draft.models';
 import {
   AppSettings,
+  AuthSession,
   Codebase,
   CreateCodebaseRequest,
   CreateWorkspaceRequest,
@@ -34,13 +35,30 @@ export class ApiService {
     return this.http.get<{ status: string }>(`${this.baseUrl}/health`);
   }
 
+  getAuthSession(): Observable<AuthSession> {
+    return this.http.get<AuthSession>(`${this.baseUrl}/auth/session`);
+  }
+
+  login(payload: { username: string; password: string; taigaUrl?: string }): Observable<AuthSession> {
+    return this.http.post<AuthSession>(`${this.baseUrl}/auth/login`, payload);
+  }
+
+  logout(): Observable<AuthSession> {
+    return this.http.post<AuthSession>(`${this.baseUrl}/auth/logout`, {});
+  }
+
   getMeta(): Observable<ProjectMeta> {
     return this.http.get<ProjectMeta>(`${this.baseUrl}/config/meta`);
   }
 
   searchUserStories(query = ''): Observable<UserStorySearchResult[]> {
+    const q = query.trim();
+    if (!q) {
+      return of([]);
+    }
+
     return this.http.get<UserStorySearchResult[]>(`${this.baseUrl}/config/userstories/search`, {
-      params: { q: query },
+      params: { q },
     });
   }
 

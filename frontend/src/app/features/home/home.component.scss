@@ -107,6 +107,17 @@
   animation: generate-pulse 1s ease-in-out infinite;
 }
 
+.generate-steps li[data-state='error'] {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.generate-steps li[data-state='error'] .generate-dot {
+  background: #dc2626;
+  border-color: #b91c1c;
+  animation: none;
+}
+
 .generate-steps li[data-state='done'] .generate-dot {
   background: #171717;
   border-color: #171717;
@@ -133,6 +144,7 @@
 .generate-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
 }

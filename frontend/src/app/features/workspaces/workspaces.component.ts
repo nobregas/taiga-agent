@@ -1,17 +1,26 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { SelectComponent } from '../../components/select/select.component';
 import { Codebase, TaigaProjectOption, Workspace } from '../../models/settings.models';
 import { TaigaUser, memberDisplayName } from '../../models/draft.models';
 import { ApiService } from '../../services/api.service';
 import { MetaService } from '../../services/meta.service';
 import { ToastService } from '../../services/toast.service';
 
+interface WorkspaceDraft {
+  name: string;
+  taigaProjectId: string;
+  taigaProjectSlug: string;
+  mergeAssigneeId: number | null;
+}
+
 @Component({
   selector: 'app-workspaces',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, SelectComponent],
   templateUrl: './workspaces.component.html',
   styleUrl: './workspaces.component.scss',
 })
@@ -20,6 +29,7 @@ export class WorkspacesComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly metaService = inject(MetaService);
   private readonly toast = inject(ToastService);
+  private readonly destroyRef = inject(DestroyRef);
 
   loading = true;
   savingWorkspace = false;
@@ -29,10 +39,11 @@ export class WorkspacesComponent implements OnInit {
   selectedWorkspaceId: number | null = null;
   codebases: Codebase[] = [];
   members: TaigaUser[] = [];
-  savingMergeRule = false;
   activeWorkspaceId: number | null = null;
   editingWorkspaceId: number | null = null;
   editingCodebaseId: number | null = null;
+  workspaceDirty = false;
+  private workspaceSnapshot: WorkspaceDraft | null = null;
 
   workspaceForm = this.fb.nonNullable.group({
     name: [''],
@@ -53,6 +64,8 @@ export class WorkspacesComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.workspaceForm.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.syncWorkspaceDirty());
+    this.captureWorkspaceSnapshot();
     this.reload();
   }
 
@@ -60,7 +73,7 @@ export class WorkspacesComponent implements OnInit {
     if (this.savingWorkspace) {
       return this.editingWorkspaceId ? 'Salvando...' : 'Criando...';
     }
-    return this.editingWorkspaceId ? 'Salvar workspace' : 'Criar workspace';
+    return this.editingWorkspaceId ? 'Salvar' : 'Criar workspace';
   }
 
   get codebaseSubmitLabel(): string {
@@ -80,7 +93,14 @@ export class WorkspacesComponent implements OnInit {
         this.selectedWorkspaceId = this.selectedWorkspaceId ?? this.activeWorkspaceId;
         this.loadCodebases();
         if (this.selectedWorkspaceId) {
-          this.loadMembers(this.selectedWorkspaceId);
+          const selected = workspaces.find((item) => item.id === this.selectedWorkspaceId);
+          if (selected) {
+            this.loadWorkspaceDraft(selected);
+          } else {
+            this.loadMembers(this.selectedWorkspaceId);
+          }
+        } else {
+          this.startNewWorkspace();
         }
         this.loading = false;
       },
@@ -101,12 +121,38 @@ export class WorkspacesComponent implements OnInit {
   }
 
   selectWorkspace(id: number): void {
+    if (id === this.selectedWorkspaceId && this.editingWorkspaceId === id) {
+      return;
+    }
+
+    if (this.workspaceDirty) {
+      this.toast.show('Salve ou cancele as alteracoes antes de trocar de workspace.');
+      return;
+    }
+
     this.selectedWorkspaceId = id;
     if (this.editingCodebaseId) {
       this.cancelCodebaseEdit();
     }
     this.loadCodebases();
-    this.loadMembers(id);
+    const workspace = this.workspaces.find((item) => item.id === id);
+    if (workspace) {
+      this.loadWorkspaceDraft(workspace);
+    }
+  }
+
+  startNewWorkspace(): void {
+    if (this.workspaceDirty) {
+      this.toast.show('Salve ou cancele as alteracoes antes de criar outro workspace.');
+      return;
+    }
+
+    this.editingWorkspaceId = null;
+    this.workspaceForm.reset(
+      { name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null },
+      { emitEvent: false },
+    );
+    this.captureWorkspaceSnapshot();
   }
 
   loadCodebases(): void {
@@ -127,22 +173,40 @@ export class WorkspacesComponent implements OnInit {
 
   startEditWorkspace(workspace: Workspace, event: Event): void {
     event.stopPropagation();
-    this.editingWorkspaceId = workspace.id;
-    this.workspaceForm.patchValue({
-      name: workspace.name,
-      taigaProjectId: String(workspace.taigaProjectId),
-      taigaProjectSlug: workspace.taigaProjectSlug ?? '',
-      mergeAssigneeId: workspace.mergeAssigneeId,
-    });
-    this.loadMembers(workspace.id);
+    if (this.workspaceDirty && this.editingWorkspaceId !== workspace.id) {
+      this.toast.show('Salve ou cancele as alteracoes antes de editar outro workspace.');
+      return;
+    }
+    this.selectedWorkspaceId = workspace.id;
+    this.loadCodebases();
+    this.loadWorkspaceDraft(workspace);
   }
 
   cancelWorkspaceEdit(): void {
-    this.editingWorkspaceId = null;
-    this.workspaceForm.reset({ name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null });
+    this.discardWorkspaceChanges();
+  }
+
+  discardWorkspaceChanges(): void {
+    if (this.editingWorkspaceId) {
+      const workspace = this.workspaces.find((item) => item.id === this.editingWorkspaceId);
+      if (workspace) {
+        this.loadWorkspaceDraft(workspace);
+        return;
+      }
+    }
+
+    this.workspaceForm.reset(
+      { name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null },
+      { emitEvent: false },
+    );
+    this.captureWorkspaceSnapshot();
   }
 
   saveWorkspace(): void {
+    if (this.editingWorkspaceId && !this.workspaceDirty) {
+      return;
+    }
+
     const value = this.workspaceForm.getRawValue();
     const taigaProjectId = Number(value.taigaProjectId);
 
@@ -165,7 +229,7 @@ export class WorkspacesComponent implements OnInit {
       this.api.updateWorkspace(id, payload).subscribe({
         next: (workspace) => {
           this.workspaces = this.workspaces.map((item) => (item.id === workspace.id ? workspace : item));
-          this.cancelWorkspaceEdit();
+          this.loadWorkspaceDraft(workspace);
           this.savingWorkspace = false;
           this.toast.show('Workspace atualizado.', 'info');
           const shouldActivate = this.activeWorkspaceId === id ? id : null;
@@ -181,12 +245,11 @@ export class WorkspacesComponent implements OnInit {
 
     this.api.createWorkspace(payload).subscribe({
       next: (workspace) => {
-        this.workspaceForm.reset({ name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null });
         this.workspaces = [...this.workspaces.filter((item) => item.id !== workspace.id), workspace];
         this.selectedWorkspaceId = workspace.id;
         this.activeWorkspaceId = workspace.id;
         this.loadCodebases();
-        this.loadMembers(workspace.id);
+        this.loadWorkspaceDraft(workspace);
         this.savingWorkspace = false;
         this.toast.show('Workspace criado.', 'info');
         this.metaService.afterWorkspaceChange(workspace.id).subscribe();
@@ -220,8 +283,17 @@ export class WorkspacesComponent implements OnInit {
         if (this.selectedWorkspaceId === id) {
           this.selectedWorkspaceId = this.workspaces[0]?.id ?? null;
         }
-        if (this.editingWorkspaceId === id) {
-          this.cancelWorkspaceEdit();
+        this.workspaceDirty = false;
+        const next = this.workspaces.find((item) => item.id === this.selectedWorkspaceId);
+        if (next) {
+          this.loadWorkspaceDraft(next);
+        } else {
+          this.editingWorkspaceId = null;
+          this.workspaceForm.reset(
+            { name: '', taigaProjectId: '', taigaProjectSlug: '', mergeAssigneeId: null },
+            { emitEvent: false },
+          );
+          this.captureWorkspaceSnapshot();
         }
         this.loadCodebases();
         this.metaService.afterWorkspaceChange().subscribe();
@@ -233,9 +305,9 @@ export class WorkspacesComponent implements OnInit {
     });
   }
 
-  onTaigaProjectChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    const project = this.taigaProjects.find((item) => String(item.id) === value);
+  onTaigaProjectSelect(value: string | number | null): void {
+    const id = String(value ?? '');
+    const project = this.taigaProjects.find((item) => String(item.id) === id);
     if (project) {
       this.workspaceForm.patchValue({
         taigaProjectId: String(project.id),
@@ -368,8 +440,21 @@ export class WorkspacesComponent implements OnInit {
       .filter(Boolean);
   }
 
-  get selectedWorkspace(): Workspace | null {
-    return this.workspaces.find((item) => item.id === this.selectedWorkspaceId) ?? null;
+  get projectOptions() {
+    return [
+      { value: '', label: 'Selecione...' },
+      ...this.taigaProjects.map((project) => ({
+        value: String(project.id),
+        label: `${project.name} (${project.slug})`,
+      })),
+    ];
+  }
+
+  get memberOptions() {
+    return [
+      { value: null, label: 'Sem regra (assignee livre)' },
+      ...this.members.map((member) => ({ value: member.id, label: this.memberLabel(member) })),
+    ];
   }
 
   memberLabel(member: TaigaUser): string {
@@ -392,27 +477,37 @@ export class WorkspacesComponent implements OnInit {
     });
   }
 
-  onMergeAssigneeChange(event: Event): void {
-    const workspaceId = this.selectedWorkspaceId;
-    if (!workspaceId) return;
-
-    const raw = (event.target as HTMLSelectElement).value;
-    const mergeAssigneeId = raw === '' ? null : Number(raw);
-    this.savingMergeRule = true;
-
-    this.api.updateWorkspace(workspaceId, { mergeAssigneeId }).subscribe({
-      next: (workspace) => {
-        this.workspaces = this.workspaces.map((item) => (item.id === workspace.id ? workspace : item));
-        this.savingMergeRule = false;
-        this.toast.show('Regra de Merge atualizada.', 'info');
-        if (this.activeWorkspaceId === workspaceId) {
-          this.metaService.afterWorkspaceChange().subscribe();
-        }
+  private loadWorkspaceDraft(workspace: Workspace): void {
+    this.editingWorkspaceId = workspace.id;
+    this.workspaceForm.reset(
+      {
+        name: workspace.name,
+        taigaProjectId: String(workspace.taigaProjectId),
+        taigaProjectSlug: workspace.taigaProjectSlug ?? '',
+        mergeAssigneeId: workspace.mergeAssigneeId,
       },
-      error: (err) => {
-        this.toast.show(err?.error?.error ?? 'Falha ao salvar regra de Merge.');
-        this.savingMergeRule = false;
-      },
-    });
+      { emitEvent: false },
+    );
+    this.captureWorkspaceSnapshot();
+    this.loadMembers(workspace.id);
+  }
+
+  private captureWorkspaceSnapshot(): void {
+    this.workspaceSnapshot = this.workspaceDraftFromForm();
+    this.workspaceDirty = false;
+  }
+
+  private syncWorkspaceDirty(): void {
+    this.workspaceDirty = JSON.stringify(this.workspaceDraftFromForm()) !== JSON.stringify(this.workspaceSnapshot);
+  }
+
+  private workspaceDraftFromForm(): WorkspaceDraft {
+    const value = this.workspaceForm.getRawValue();
+    return {
+      name: value.name.trim(),
+      taigaProjectId: String(value.taigaProjectId ?? '').trim(),
+      taigaProjectSlug: value.taigaProjectSlug.trim(),
+      mergeAssigneeId: value.mergeAssigneeId ?? null,
+    };
   }
 }

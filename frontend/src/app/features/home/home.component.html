@@ -28,6 +28,7 @@
       [loading]="loading"
       (generate)="onGenerate($event)"
       (openExisting)="onOpenExisting($event)"
+      (createManual)="openManualDraft($event)"
     ></app-draft-form>
   }
 
@@ -89,6 +90,7 @@
         <p class="generate-error" role="alert">{{ generateError }}</p>
         <div class="generate-actions">
           <button type="button" class="btn ghost" (click)="closeGenerateModal()">Fechar</button>
+          <button type="button" class="btn ghost" (click)="openManualDraft()">Criar manualmente</button>
           <button type="button" class="btn primary" (click)="retryGenerate()">Tentar de novo</button>
         </div>
       } @else {

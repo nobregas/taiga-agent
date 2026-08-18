@@ -12,10 +12,23 @@ export interface AppSettings {
   hasGeminiApiKey: boolean;
 }
 
+export interface AuthUser {
+  id: number;
+  username: string;
+  full_name: string;
+  email?: string | null;
+  photo?: string | null;
+}
+
+export interface AuthSession {
+  authenticated: boolean;
+  user: AuthUser | null;
+  taigaUrl: string;
+  lastUsername: string | null;
+}
+
 export interface UpdateSettingsRequest {
   taigaUrl?: string;
-  taigaUsername?: string;
-  taigaPassword?: string;
   taigaToken?: string;
   geminiApiKey?: string;
   geminiModel?: string;

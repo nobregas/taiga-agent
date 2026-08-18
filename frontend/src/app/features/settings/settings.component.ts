@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AppSettings } from '../../models/settings.models';
 import { ApiService } from '../../services/api.service';
+import { AuthService } from '../../services/auth.service';
 import { MetaService } from '../../services/meta.service';
 import { ToastService } from '../../services/toast.service';
 
@@ -19,6 +20,7 @@ export class SettingsComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly metaService = inject(MetaService);
   private readonly toast = inject(ToastService);
+  readonly auth = inject(AuthService);
 
   loading = true;
   saving = false;
@@ -26,8 +28,6 @@ export class SettingsComponent implements OnInit {
 
   form = this.fb.nonNullable.group({
     taigaUrl: ['https://api.taiga.io/api/v1'],
-    taigaUsername: [''],
-    taigaPassword: [''],
     taigaToken: [''],
     geminiApiKey: [''],
     geminiModel: ['gemini-2.5-flash'],
@@ -39,7 +39,6 @@ export class SettingsComponent implements OnInit {
         this.settings = settings;
         this.form.patchValue({
           taigaUrl: settings.taigaUrl,
-          taigaUsername: settings.taigaUsername ?? '',
           geminiModel: settings.geminiModel,
         });
         this.loading = false;
@@ -58,8 +57,6 @@ export class SettingsComponent implements OnInit {
     this.api
       .updateSettings({
         taigaUrl: value.taigaUrl,
-        taigaUsername: value.taigaUsername,
-        taigaPassword: value.taigaPassword || undefined,
         taigaToken: value.taigaToken || undefined,
         geminiApiKey: value.geminiApiKey || undefined,
         geminiModel: value.geminiModel,
@@ -67,8 +64,9 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: (settings) => {
           this.settings = settings;
-          this.form.patchValue({ taigaPassword: '', taigaToken: '', geminiApiKey: '' });
+          this.form.patchValue({ taigaToken: '', geminiApiKey: '' });
           this.metaService.refresh();
+          this.auth.reloadSession().subscribe();
           this.toast.show('Configuracoes salvas.', 'info');
           this.saving = false;
         },

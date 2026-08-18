@@ -1,0 +1,208 @@
+<div class="tasks-board">
+  <div class="tasks-board__scroll">
+    <div class="tasks-toolbar">
+      <p>Prefixo por dominio: [Pedido], [Checkout], [Pagamento] — nunca o escopo da US</p>
+      <div class="tasks-toolbar-actions">
+        <button type="button" class="btn ghost sm" (click)="openBulkModal()">Atribuir em lote</button>
+        @if (doneStatusId) {
+          <button
+            type="button"
+            class="btn ghost sm toggle-all-done"
+            [class.active]="allTasksDone"
+            (click)="toggleAllTasksDone()"
+          >
+            {{ allTasksDone ? 'Marcar todas New' : 'Marcar todas Done' }}
+          </button>
+        }
+        @if (missingFinalTasks) {
+          <button type="button" class="btn ghost sm" (click)="restoreFinalTasks()">
+            Restaurar Subir PR / Merge
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="tasks-list">
+      @for (task of tasks.controls; track $index) {
+        <div
+          class="task-card"
+          [formGroup]="asGroup(task)"
+          [class.task-card--gitlab-done]="isTaskBranchComplete($index)"
+          [class.task-card--gitlab-pending]="isTaskGitlabInformed($index) && !isTaskBranchComplete($index)"
+        >
+          <div class="task-head">
+            <div class="task-head__title">
+              <strong>
+                @if (variant === 'published' && task.get('url')?.value) {
+                  <a [href]="task.get('url')?.value" target="_blank" rel="noopener">
+                    Task #{{ task.get('ref')?.value }}
+                  </a>
+                } @else {
+                  Task {{ $index + 1 }}
+                }
+              </strong>
+              @if (isTaskGitlabInformed($index)) {
+                <div class="task-badges">
+                  <span class="badge badge--gitlab">Da branch</span>
+                  @if (isTaskBranchComplete($index)) {
+                    <span class="badge badge--done">Concluida na branch</span>
+                  } @else {
+                    <span class="badge badge--pending">Pendente na branch</span>
+                  }
+                </div>
+              }
+            </div>
+            @if (canRemove($index)) {
+              <button type="button" class="btn danger sm" (click)="removeTask($index)">Remover</button>
+            }
+          </div>
+          <input
+            formControlName="subject"
+            placeholder="[Checkout] Adicionar QRcode ao pagamento"
+            (blur)="onTaskSubjectChange($index)"
+          />
+          <textarea formControlName="description" rows="2" placeholder="Detalhes opcionais"></textarea>
+          @if (taskInferredFrom($index).length) {
+            <small class="hint task-evidence">
+              Evidencias: {{ taskInferredFrom($index).join(' · ') }}
+            </small>
+          }
+          <div class="task-meta-row">
+            <label class="field field--assignee">
+              <span>Responsavel</span>
+              <app-select
+                formControlName="assignedTo"
+                [options]="assigneeOptions"
+                placeholder="Sem responsavel"
+                ariaLabel="Responsavel da task"
+                (valueChange)="onAssigneeChange($index, $event)"
+              />
+              @if (isMergeAssigneeLocked($index)) {
+                <small class="hint">Definido pelo workspace para tasks de Merge</small>
+              }
+            </label>
+            <div class="field">
+              <span>Status</span>
+              <div class="status-buttons">
+                @for (status of openTaskStatusesList; track status.id) {
+                  <button
+                    type="button"
+                    class="status-btn sm"
+                    [class.active]="task.get('statusId')?.value === status.id"
+                    (click)="setTaskStatus($index, status.id)"
+                  >
+                    {{ status.name }}
+                  </button>
+                }
+                @if (doneStatusId) {
+                  <button
+                    type="button"
+                    class="status-btn sm done-toggle"
+                    [class.active]="isTaskDone($index)"
+                    (click)="toggleTaskDone($index)"
+                  >
+                    Done
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="tasks-add-bar">
+    <input
+      class="tasks-add-bar__input"
+      [value]="newTaskSubject"
+      (input)="newTaskSubject = $any($event.target).value"
+      (keydown.enter)="addTaskFromInput(); $event.preventDefault()"
+      placeholder="Nova task — ex.: [Checkout] Validar cupom"
+      aria-label="Assunto da nova task"
+    />
+    <button type="button" class="btn primary sm" (click)="addTaskFromInput()">Adicionar task</button>
+  </div>
+</div>
+
+@if (bulkModalOpen) {
+  <div class="bulk-overlay" (click)="closeBulkModal()">
+    <div
+      #bulkDialog
+      class="bulk-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bulk-assign-title"
+      tabindex="-1"
+      (click)="$event.stopPropagation()"
+    >
+      <h3 id="bulk-assign-title">Atribuir em lote</h3>
+      <p class="bulk-dialog__hint">Escolha o responsavel e as tasks que receberao essa pessoa.</p>
+
+      <div class="bulk-dialog__body">
+        <section>
+          <h4>Responsavel</h4>
+          @if (members.length) {
+            <div class="bulk-users" role="listbox" aria-label="Responsavel">
+              @for (member of members; track member.id) {
+                <button
+                  type="button"
+                  class="bulk-user"
+                  [class.active]="bulkAssigneeId === member.id"
+                  [attr.aria-pressed]="bulkAssigneeId === member.id"
+                  (click)="selectBulkAssignee(member.id)"
+                >
+                  <span class="bulk-user__avatar" aria-hidden="true">{{ memberInitials(member) }}</span>
+                  <span class="bulk-user__name">{{ memberDisplay(member) }}</span>
+                </button>
+              }
+            </div>
+          } @else {
+            <p class="bulk-empty">Nenhum usuario no workspace.</p>
+          }
+        </section>
+
+        <section>
+          <h4>Tasks</h4>
+          @if (tasks.length) {
+            <div class="bulk-tasks">
+              @for (task of tasks.controls; track $index) {
+                <label
+                  class="bulk-task"
+                  [class.bulk-task--selected]="isTaskBulkSelected($index)"
+                  [class.bulk-task--locked]="isMergeAssigneeLocked($index)"
+                >
+                  <input
+                    type="checkbox"
+                    [checked]="isTaskBulkSelected($index)"
+                    [disabled]="isMergeAssigneeLocked($index)"
+                    (change)="toggleBulkTask($index)"
+                  />
+                  <span class="bulk-task__text">
+                    <strong>{{ taskTitle($index) }}</strong>
+                    <span>{{ taskSubject($index) }}</span>
+                    @if (isMergeAssigneeLocked($index)) {
+                      <small>Bloqueada pelo workspace — nao pode ser reatribuida</small>
+                    }
+                  </span>
+                </label>
+              }
+            </div>
+          } @else {
+            <p class="bulk-empty">Nenhuma task para atribuir.</p>
+          }
+        </section>
+      </div>
+
+      <div class="bulk-dialog__actions">
+        @if (bulkSelectedIndexes.length) {
+          <small>{{ bulkSelectedIndexes.length }} task(s) selecionada(s)</small>
+        }
+        <button type="button" class="btn ghost" (click)="closeBulkModal()">Cancelar</button>
+        <button type="button" class="btn primary" [disabled]="!canConfirmBulk" (click)="confirmBulkAssign()">
+          Confirmar
+        </button>
+      </div>
+    </div>
+  </div>
+}

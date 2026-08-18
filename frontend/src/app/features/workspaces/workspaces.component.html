@@ -17,12 +17,12 @@
           @if (taigaProjects.length) {
             <label class="field">
               <span>Projeto Taiga</span>
-              <select formControlName="taigaProjectId" (change)="onTaigaProjectChange($event)">
-                <option value="">Selecione...</option>
-                @for (project of taigaProjects; track project.id) {
-                  <option [value]="project.id">{{ project.name }} ({{ project.slug }})</option>
-                }
-              </select>
+              <app-select
+                formControlName="taigaProjectId"
+                [options]="projectOptions"
+                placeholder="Selecione..."
+                (valueChange)="onTaigaProjectSelect($event)"
+              />
             </label>
           }
           <label class="field">
@@ -39,20 +39,23 @@
           </label>
           <label class="field">
             <span>Tasks de Merge devem ser sempre de</span>
-            <select formControlName="mergeAssigneeId">
-              <option [ngValue]="null">Sem regra (assignee livre)</option>
-              @for (member of members; track member.id) {
-                <option [ngValue]="member.id">{{ memberLabel(member) }}</option>
-              }
-            </select>
+            <app-select
+              formControlName="mergeAssigneeId"
+              [options]="memberOptions"
+              placeholder="Sem regra (assignee livre)"
+            />
             <small class="hint">A task Merge fica bloqueada neste usuario ao gerar e publicar.</small>
           </label>
           <div class="form-actions">
-            <button type="submit" class="primary" [disabled]="savingWorkspace">
+            <button type="submit" class="primary" [disabled]="savingWorkspace || !workspaceDirty">
               {{ workspaceSubmitLabel }}
             </button>
-            @if (editingWorkspaceId) {
-              <button type="button" class="ghost" (click)="cancelWorkspaceEdit()">Cancelar</button>
+            <button type="button" class="ghost" (click)="discardWorkspaceChanges()" [disabled]="!workspaceDirty">
+              Cancelar
+            </button>
+            <button type="button" class="ghost" (click)="startNewWorkspace()">Novo workspace</button>
+            @if (workspaceDirty) {
+              <small class="hint dirty-hint">Alteracoes nao salvas</small>
             }
           </div>
         </form>
@@ -87,28 +90,6 @@
             </article>
           }
         </div>
-
-        @if (selectedWorkspace) {
-          <div class="merge-rule">
-            <h3>Regra de Merge</h3>
-            <label class="field">
-              <span>Tasks de Merge devem ser sempre de</span>
-              <select
-                [value]="selectedWorkspace.mergeAssigneeId ?? ''"
-                [disabled]="savingMergeRule"
-                (change)="onMergeAssigneeChange($event)"
-              >
-                <option value="">Sem regra (assignee livre)</option>
-                @for (member of members; track member.id) {
-                  <option [value]="member.id">{{ memberLabel(member) }}</option>
-                }
-              </select>
-              <small class="hint">
-                Identifica a task pelo nome "Merge". O responsavel fica travado neste usuario.
-              </small>
-            </label>
-          </div>
-        }
       </section>
 
       <section class="panel">

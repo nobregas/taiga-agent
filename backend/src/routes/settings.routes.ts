@@ -14,8 +14,6 @@ settingsRouter.put('/', (req, res, next) => {
   try {
     const updated = settingsRepository.update({
       taigaUrl: req.body.taigaUrl,
-      taigaUsername: req.body.taigaUsername,
-      taigaPassword: req.body.taigaPassword,
       taigaToken: req.body.taigaToken,
       geminiApiKey: req.body.geminiApiKey,
       geminiModel: req.body.geminiModel,

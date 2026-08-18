@@ -45,6 +45,18 @@
   max-height: min(560px, calc(100vh - 280px));
 }
 
+.tab-panel--tasks {
+  overflow: hidden;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-panel--tasks app-tasks-board {
+  flex: 1;
+  min-height: 0;
+}
+
 .subject-banner {
   font-size: 0.9375rem;
   font-weight: 600;
@@ -145,7 +157,7 @@ textarea:focus {
   cursor: pointer;
 }
 
-.field--sprint select {
+.field--sprint {
   max-width: 18rem;
 }
 
@@ -222,74 +234,6 @@ textarea:focus {
   gap: 0.6rem;
 }
 
-.people-strip {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: var(--surface);
-  padding: 0.2rem 0 0.5rem;
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: 0.4rem;
-}
-
-.people-strip__label {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.7rem;
-  align-items: baseline;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.people-strip__label small {
-  color: var(--muted);
-  font-size: 0.6875rem;
-  font-weight: 400;
-}
-
-.people-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
-}
-
-.person-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem 0.15rem 0.15rem;
-  background: var(--surface);
-  cursor: pointer;
-  font-size: 0.75rem;
-}
-
-.person-chip.active {
-  background: var(--text);
-  color: var(--surface);
-  border-color: var(--text);
-}
-
-.person-chip__avatar {
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  font-size: 0.625rem;
-  font-weight: 700;
-  background: var(--surface-muted);
-  color: var(--text);
-}
-
-.person-chip.active .person-chip__avatar {
-  background: #404040;
-  color: var(--surface);
-}
-
 .task-meta-row {
   display: grid;
   grid-template-columns: minmax(12rem, 16rem) 1fr;
@@ -298,15 +242,6 @@ textarea:focus {
 
 .field--assignee select {
   max-width: 16rem;
-}
-
-.task-card--bulk-target {
-  cursor: pointer;
-}
-
-.task-card--bulk-selected {
-  border-color: var(--text);
-  box-shadow: 0 0 0 1px var(--text);
 }
 
 .tasks-add-bar {

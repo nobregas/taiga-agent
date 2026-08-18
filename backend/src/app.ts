@@ -7,8 +7,10 @@ import { generateRouter } from './routes/generate.routes.js';
 import { publishRouter } from './routes/publish.routes.js';
 import { settingsRouter } from './routes/settings.routes.js';
 import { workspacesRouter } from './routes/workspaces.routes.js';
+import { authRouter } from './routes/auth.routes.js';
 import { runtimeConfig } from './services/runtime-config.service.js';
 import { formatErrorMessage } from './utils/error-message.js';
+import { HttpError } from './utils/http-error.js';
 
 export function createApp() {
   const app = express();
@@ -22,15 +24,14 @@ export function createApp() {
       status: 'ok',
       hasActiveWorkspace: runtimeConfig.hasActiveWorkspace(),
       hasDefaultCodebase: runtimeConfig.hasDefaultCodebase(),
-      settingsConfigured: Boolean(
-        settings.geminiApiKey && (settings.taigaToken || (settings.taigaUsername && settings.taigaPassword)),
-      ),
+      settingsConfigured: Boolean(settings.geminiApiKey && runtimeConfig.isTaigaAuthenticated()),
       taigaConfigured: Boolean(runtimeConfig.getTaigaConfig().projectId),
       geminiConfigured: Boolean(settings.geminiApiKey),
       gitlabConfigured: runtimeConfig.isGitlabConfigured(),
     });
   });
 
+  app.use('/api/auth', authRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/workspaces', workspacesRouter);
   app.use('/api', codebasesRouter);
@@ -40,7 +41,8 @@ export function createApp() {
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(error);
-    res.status(500).json({ error: formatErrorMessage(error) });
+    const status = error instanceof HttpError ? error.status : 500;
+    res.status(status).json({ error: formatErrorMessage(error) });
   });
 
   return app;

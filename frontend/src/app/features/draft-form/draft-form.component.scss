@@ -7,7 +7,7 @@
   flex-direction: column;
   gap: 1rem;
   position: relative;
-  padding-bottom: calc(3.25rem + 18px);
+  padding-bottom: calc(4.5rem + 18px);
 }
 
 .mode-grid {
@@ -184,6 +184,13 @@
 
 .autocomplete-dropdown .result-item:hover {
   background: var(--surface-muted);
+}
+
+.autocomplete-dropdown .result-empty {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
 }
 
 .field--branch {
@@ -408,6 +415,29 @@ textarea:focus {
 .fab:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.manual-btn {
+  position: absolute;
+  left: 0;
+  bottom: 22px;
+  z-index: 2;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.7rem 1.05rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.manual-btn:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.manual-hint {
+  margin: 0;
 }
 
 .btn:disabled {

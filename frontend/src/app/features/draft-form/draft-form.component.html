@@ -41,12 +41,18 @@
               (input)="onUsAutocompleteInput()"
               (blur)="closeUsSuggestions()"
             />
-            @if (usSuggestionsOpen && searchResults.length) {
+            @if (usSuggestionsOpen && (searchResults.length || usSearchError || usSearchQuery)) {
               <div class="autocomplete-dropdown">
-                @for (us of searchResults; track us.id) {
-                  <button type="button" class="result-item" (mousedown)="selectUserStory(us)">
-                    #{{ us.ref }} — {{ us.subject }}
-                  </button>
+                @if (usSearchError) {
+                  <p class="result-empty">{{ usSearchError }}</p>
+                } @else if (searchResults.length) {
+                  @for (us of searchResults; track us.id) {
+                    <button type="button" class="result-item" (mousedown)="selectUserStory(us)">
+                      #{{ us.ref }} — {{ us.subject }}
+                    </button>
+                  }
+                } @else if (usSearchQuery) {
+                  <p class="result-empty">Nenhuma US encontrada</p>
                 }
               </div>
             }
@@ -76,14 +82,7 @@
 
         <label class="field field--repositorio">
           <span>Repositorio GitLab</span>
-          <select formControlName="codebaseId">
-            @if (!meta?.codebases?.length) {
-              <option [ngValue]="null">Nenhum repositorio cadastrado</option>
-            }
-            @for (codebase of meta?.codebases ?? []; track codebase.id) {
-              <option [ngValue]="codebase.id">{{ codebase.name }}</option>
-            }
-          </select>
+          <app-select formControlName="codebaseId" [options]="codebaseOptions" placeholder="Selecione o repositorio" />
           <small class="hint">
             Repositorio usado para commits, diffs e contexto da US.
             Cadastre em Workspaces se a lista estiver vazia.
@@ -176,10 +175,11 @@
             <span>Objetivo (opcional)</span>
             <textarea formControlName="objetivo" rows="3" placeholder="IA pode inferir"></textarea>
           </label>
-          <label class="field">
+          <div class="field">
             <span>Criterios de aceite (opcional)</span>
-            <textarea formControlName="criteriosAceite" rows="3" placeholder="Vazio na maioria dos casos"></textarea>
-          </label>
+            <small class="hint">Um criterio por linha. Enter cria o proximo ponto.</small>
+            <app-criterios-editor formControlName="criteriosAceite" />
+          </div>
         </div>
 
         <label class="field field--spaced-top">
@@ -193,6 +193,15 @@
       }
     }
   </div>
+
+  @if (!isExistingUsMode) {
+    @if (!meta?.geminiConfigured) {
+      <p class="hint manual-hint">A IA nao esta configurada. Voce ainda pode criar a US manualmente.</p>
+    }
+    <button type="button" class="manual-btn" [disabled]="loading" (click)="emitManual()">
+      Criar US manualmente
+    </button>
+  }
 
   <button type="submit" class="fab" [disabled]="loading || form.invalid">
     {{ submitLabel }}

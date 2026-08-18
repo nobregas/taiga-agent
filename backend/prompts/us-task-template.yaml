@@ -8,7 +8,8 @@ us:
     {objetivo}
 
     (Critérios de Aceite)
-    {criterios_aceite}
+    - {criterio_1}
+    - {criterio_2}
 
     (Branch)
     {branch}
@@ -27,8 +28,8 @@ tags:
     dominio: ["pedido", "checkout", "pagamento", "carrinho", "catalogo", "usuario"]
   rules: |
     Gere tagPlan com exatamente 4 valores (aplicacao, escopo, tipo, dominio).
-    Use SOMENTE tags ja cadastradas no projeto Taiga (lista fechada no prompt).
-    Nunca invente nomes novos; se nada servir, escolha a tag existente mais proxima.
+    Prefira tags ja cadastradas no projeto Taiga (lista compacta no prompt).
+    Crie uma tag nova somente se nenhum nome existente servir razoavelmente.
 task:
   language: obliqua
   domain_examples: [Pedido, Checkout, Pagamento, Carrinho]

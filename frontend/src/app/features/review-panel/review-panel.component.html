@@ -7,7 +7,7 @@
       </button>
     </nav>
 
-    <form [formGroup]="form" class="tab-panel">
+    <form [formGroup]="form" class="tab-panel" [class.tab-panel--tasks]="activeTab === 'tasks'">
       @if (activeTab === 'us') {
         <div class="subject-banner">{{ computedSubject }}</div>
 
@@ -41,19 +41,29 @@
         @if (sprints.length) {
           <label class="field field--sprint">
             <span>Sprint</span>
-            <select formControlName="milestoneId">
-              <option [ngValue]="null">Sem sprint</option>
-              @for (sprint of sprints; track sprint.id) {
-                <option [ngValue]="sprint.id">{{ sprint.name }}</option>
-              }
-            </select>
+            <app-select formControlName="milestoneId" [options]="sprintOptions" placeholder="Sem sprint" />
           </label>
         }
 
         <label class="field">
-          <span>Descricao da US</span>
-          <small class="hint">Formato Taiga: (Contexto), (Objetivo), (Critérios de Aceite), (Branch)</small>
-          <textarea formControlName="usDescription" rows="12" class="descricao-us"></textarea>
+          <span>Contexto</span>
+          <textarea formControlName="contexto" rows="4"></textarea>
+        </label>
+
+        <label class="field">
+          <span>Objetivo</span>
+          <textarea formControlName="objetivo" rows="3"></textarea>
+        </label>
+
+        <div class="field">
+          <span>Criterios de aceite</span>
+          <small class="hint">Um criterio por linha, com prefixo "-". Enter cria o proximo.</small>
+          <app-criterios-editor formControlName="criteriosAceite" />
+        </div>
+
+        <label class="field">
+          <span>Branch</span>
+          <input formControlName="branch" />
         </label>
 
         <div class="field" formGroupName="tagPlan">
@@ -145,150 +155,12 @@
           </div>
         }
 
-        <div class="people-strip" role="listbox" aria-label="Membros do projeto">
-          <div class="people-strip__label">
-            <span>Atribuir</span>
-            @if (bulkAssignee) {
-              <small>Clique nas tasks para atribuir a {{ memberDisplay(bulkAssignee) }}</small>
-            } @else {
-              <small>Selecione uma pessoa e clique nas tasks, ou use o seletor de cada task</small>
-            }
-          </div>
-          <div class="people-chips">
-            @for (member of members; track member.id) {
-              <button
-                type="button"
-                class="person-chip"
-                [class.active]="bulkAssigneeId === member.id"
-                [attr.aria-pressed]="bulkAssigneeId === member.id"
-                (click)="toggleBulkAssignee(member.id)"
-              >
-                <span class="person-chip__avatar" aria-hidden="true">{{ memberInitials(member) }}</span>
-                <span class="person-chip__name">{{ memberDisplay(member) }}</span>
-              </button>
-            }
-            @if (bulkAssigneeId) {
-              <button type="button" class="btn ghost sm" (click)="clearBulkAssignee()">Concluir</button>
-            }
-          </div>
-        </div>
-
-        <div class="tasks-toolbar">
-          <p>Prefixo por dominio: [Pedido], [Checkout], [Pagamento] — nunca o escopo da US</p>
-          <div class="tasks-toolbar-actions">
-            @if (doneStatusId) {
-              <button
-                type="button"
-                class="btn ghost sm toggle-all-done"
-                [class.active]="allTasksDone"
-                (click)="toggleAllTasksDone()"
-              >
-                {{ allTasksDone ? 'Marcar todas New' : 'Marcar todas Done' }}
-              </button>
-            }
-            @if (missingFinalTasks) {
-              <button type="button" class="btn ghost sm" (click)="restoreFinalTasks()">
-                Restaurar Subir PR / Merge
-              </button>
-            }
-          </div>
-        </div>
-
-        <div formArrayName="tasks" class="tasks-list" [class.tasks-list--bulk]="bulkAssigneeId !== null">
-          @for (task of tasks.controls; track $index) {
-            <div
-              class="task-card"
-              [formGroupName]="$index"
-              [class.task-card--gitlab-done]="isTaskBranchComplete($index)"
-              [class.task-card--gitlab-pending]="isTaskGitlabInformed($index) && !isTaskBranchComplete($index)"
-              [class.task-card--bulk-target]="bulkAssigneeId !== null"
-              [class.task-card--bulk-selected]="isTaskAssignedToBulk($index)"
-              (click)="onTaskCardClick($index, $event)"
-            >
-              <div class="task-head">
-                <div class="task-head__title">
-                  <strong>Task {{ $index + 1 }}</strong>
-                  @if (isTaskGitlabInformed($index)) {
-                    <div class="task-badges">
-                      <span class="badge badge--gitlab">Da branch</span>
-                      @if (isTaskBranchComplete($index)) {
-                        <span class="badge badge--done">Concluida na branch</span>
-                      } @else {
-                        <span class="badge badge--pending">Pendente na branch</span>
-                      }
-                    </div>
-                  }
-                </div>
-                <button type="button" class="btn danger sm" (click)="removeTask($index)">Remover</button>
-              </div>
-              <input
-                formControlName="subject"
-                placeholder="[Checkout] Adicionar QRcode ao pagamento"
-                (blur)="onTaskSubjectChange($index)"
-              />
-              <textarea formControlName="description" rows="2" placeholder="Detalhes opcionais"></textarea>
-              @if (taskInferredFrom($index).length) {
-                <small class="hint task-evidence">
-                  Evidencias: {{ taskInferredFrom($index).join(' · ') }}
-                </small>
-              }
-              <div class="task-meta-row">
-                <label class="field field--assignee">
-                  <span>Responsavel</span>
-                  <select
-                    formControlName="assignedTo"
-                    (change)="onAssigneeChange($index)"
-                  >
-                    <option [ngValue]="null">Sem responsavel</option>
-                    @for (member of members; track member.id) {
-                      <option [ngValue]="member.id">{{ memberDisplay(member) }}</option>
-                    }
-                  </select>
-                  @if (isMergeAssigneeLocked($index)) {
-                    <small class="hint">Definido pelo workspace para tasks de Merge</small>
-                  }
-                </label>
-                <div class="field">
-                  <span>Status</span>
-                  <div class="status-buttons">
-                    @for (status of openTaskStatusesList; track status.id) {
-                      <button
-                        type="button"
-                        class="status-btn sm"
-                        [class.active]="task.get('statusId')?.value === status.id"
-                        (click)="setTaskStatus($index, status.id)"
-                      >
-                        {{ status.name }}
-                      </button>
-                    }
-                    @if (doneStatusId) {
-                      <button
-                        type="button"
-                        class="status-btn sm done-toggle"
-                        [class.active]="isTaskDone($index)"
-                        (click)="toggleTaskDone($index)"
-                      >
-                        Done
-                      </button>
-                    }
-                  </div>
-                </div>
-              </div>
-            </div>
-          }
-        </div>
-
-        <div class="tasks-add-bar">
-          <input
-            class="tasks-add-bar__input"
-            [value]="newTaskSubject"
-            (input)="newTaskSubject = $any($event.target).value"
-            (keydown.enter)="addTaskFromInput(); $event.preventDefault()"
-            placeholder="Nova task — ex.: [Checkout] Validar cupom"
-            aria-label="Assunto da nova task"
-          />
-          <button type="button" class="btn primary sm" (click)="addTaskFromInput()">Adicionar task</button>
-        </div>
+        <app-tasks-board
+          [tasks]="tasks"
+          [meta]="meta"
+          variant="review"
+          (tasksChanged)="syncUsStatusFromTasks()"
+        />
       }
     </form>
 

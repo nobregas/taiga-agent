@@ -58,6 +58,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.dirty-hint {
+  margin-left: 0.15rem;
 }
 
 .field {
