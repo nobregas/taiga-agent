@@ -8,6 +8,7 @@ import {
 } from '../schemas/draft.schema.js';
 import { tagPlanToTaigaTags } from '../utils/tags.js';
 import { applyDefaultAssignees, isMergeTask } from '../utils/default-tasks.js';
+import { sanitizeAssignedTo, toValidUserId } from '../utils/user-id.js';
 import { taigaService } from '../services/taiga.service.js';
 import {
   areAllTasksComplete,
@@ -48,12 +49,14 @@ publishRouter.post('/', async (req, res, next) => {
     );
 
     const workspace = runtimeConfig.getActiveWorkspace();
+    const defaultAssigneeId = toValidUserId(meta.currentUser?.id);
+    const mergeAssigneeId = toValidUserId(workspace?.mergeAssigneeId);
     const preparedTasks = applyDefaultAssignees(draft.tasks, {
-      defaultAssigneeId: meta.currentUser?.id ?? null,
-      mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
+      defaultAssigneeId,
+      mergeAssigneeId,
     }).map((task) =>
-      workspace?.mergeAssigneeId && isMergeTask(task.subject)
-        ? { ...task, assignedTo: workspace.mergeAssigneeId }
+      mergeAssigneeId != null && isMergeTask(task.subject)
+        ? { ...task, assignedTo: mergeAssigneeId }
         : task,
     );
 
@@ -107,7 +110,7 @@ publishRouter.post('/', async (req, res, next) => {
         subject: task.subject,
         description: task.description,
         statusId: task.statusId ?? defaultTaskStatusId,
-        assignedTo: task.assignedTo ?? meta.currentUser?.id ?? null,
+        assignedTo: toValidUserId(task.assignedTo) ?? defaultAssigneeId,
       })),
       defaultStatusId: defaultTaskStatusId,
     });
@@ -137,7 +140,7 @@ publishRouter.post('/', async (req, res, next) => {
       gitNotes: draft.gitNotes,
       reminders: [
         'Cada US deve ter seu proprio Pull Request unico.',
-        `Branch documentada: ${draft.branch}`,
+        `Branch documentada: ${draft.branch?.trim() || 'A definir'}`,
         'Para USs grandes, PRs secundarias devem apontar para a branch da US.',
       ],
     });
@@ -175,12 +178,13 @@ publishRouter.patch('/update', async (req, res, next) => {
     });
 
     const workspace = runtimeConfig.getActiveWorkspace();
+    const mergeAssigneeId = toValidUserId(workspace?.mergeAssigneeId);
     const updatedTasks = [];
     for (const task of tasks) {
       const assignedTo =
-        workspace?.mergeAssigneeId && isMergeTask(task.subject)
-          ? workspace.mergeAssigneeId
-          : task.assignedTo;
+        mergeAssigneeId != null && isMergeTask(task.subject)
+          ? mergeAssigneeId
+          : sanitizeAssignedTo(task.assignedTo);
 
       if (!task.id) {
         updatedTasks.push(

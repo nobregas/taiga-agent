@@ -6,6 +6,7 @@ import { SelectComponent } from '../../components/select/select.component';
 import { TasksBoardComponent, createTaskFormGroup } from '../tasks-board/tasks-board.component';
 import {
   Draft,
+  OPTIONAL_TAG_CATEGORIES,
   ProjectMeta,
   PublishResponse,
   TAG_CATEGORIES,
@@ -21,6 +22,7 @@ import {
   parseUsDescription,
   resolveUserStoryStatusId,
   tagColorFor,
+  toValidUserId,
 } from '../../models/draft.models';
 
 @Component({
@@ -49,6 +51,7 @@ export class PublishedPanelComponent implements OnChanges {
   tagCategories = TAG_CATEGORIES;
   tagCategoryLabels = TAG_CATEGORY_LABELS;
   tagColorOverrides: Record<string, string> = {};
+  private readonly optionalTagCategories: readonly TagCategory[] = OPTIONAL_TAG_CATEGORIES;
 
   constructor(private readonly fb: FormBuilder) {}
 
@@ -90,12 +93,16 @@ export class PublishedPanelComponent implements OnChanges {
     return this.meta?.tags ?? [];
   }
 
+  get isImplemented(): boolean {
+    return this.draft?.implemented !== false;
+  }
+
   get defaultAssigneeId(): number | null {
-    return this.meta?.currentUser?.id ?? null;
+    return toValidUserId(this.meta?.currentUser?.id);
   }
 
   get mergeAssigneeId(): number | null {
-    return this.meta?.mergeAssigneeId ?? null;
+    return toValidUserId(this.meta?.mergeAssigneeId);
   }
 
   private buildForm(draft: Draft, result: PublishResponse): void {
@@ -115,7 +122,8 @@ export class PublishedPanelComponent implements OnChanges {
         subject: task.subject,
         description: task.description ?? draft.tasks[index]?.description ?? '',
         statusId: task.statusId,
-        assignedTo: task.assignedTo ?? draft.tasks[index]?.assignedTo ?? this.defaultAssigneeId,
+        assignedTo:
+          toValidUserId(task.assignedTo) ?? toValidUserId(draft.tasks[index]?.assignedTo) ?? this.defaultAssigneeId,
       })),
       {
         defaultAssigneeId: this.defaultAssigneeId,
@@ -134,14 +142,17 @@ export class PublishedPanelComponent implements OnChanges {
       contexto: [parsed.contexto || draft.contexto, Validators.required],
       objetivo: [parsed.objetivo || draft.objetivo, Validators.required],
       criteriosAceite: [formatAcceptanceCriteria(parsed.criteriosAceite ?? draft.criteriosAceite)],
-      branch: [parsed.branch || draft.branch, Validators.required],
+      // Mirrors the conditional branch requirement in draft-form/review-panel — a US
+      // created without an implementation shouldn't suddenly require a branch to save.
+      branch: [parsed.branch || draft.branch, draft.implemented === false ? [] : Validators.required],
       usStatusId: [defaultUsStatus ?? 0, Validators.required],
       milestoneId: [defaultSprintId],
       tagPlan: this.fb.nonNullable.group({
         aplicacao: [draft.tagPlan.aplicacao, Validators.required],
         escopo: [draft.tagPlan.escopo, Validators.required],
         tipo: [draft.tagPlan.tipo, Validators.required],
-        dominio: [draft.tagPlan.dominio, Validators.required],
+        // Dominio is the only optional tag category — it can be cleared via the UI.
+        dominio: [draft.tagPlan.dominio],
       }),
       tasks: this.fb.array(
         preparedTasks.map((task) =>
@@ -159,6 +170,21 @@ export class PublishedPanelComponent implements OnChanges {
     const plan = this.form.get('tagPlan')?.getRawValue();
     if (!plan) return '#737373';
     return tagColorFor(plan, category, this.tagColorOverrides, this.meta?.tagColors);
+  }
+
+  isTagOptional(category: TagCategory): boolean {
+    return this.optionalTagCategories.includes(category);
+  }
+
+  isTagClearable(category: TagCategory): boolean {
+    return this.isTagOptional(category) && Boolean(this.form.get('tagPlan')?.get(category)?.value?.trim());
+  }
+
+  clearTag(category: TagCategory): void {
+    if (!this.isTagOptional(category)) {
+      return;
+    }
+    this.form.get('tagPlan')?.get(category)?.setValue('');
   }
 
   onTagNameChange(category: TagCategory): void {
@@ -235,8 +261,8 @@ export class PublishedPanelComponent implements OnChanges {
           description: task.description,
           statusId: task.statusId,
           assignedTo: isMergeTask(task.subject)
-            ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
-            : (task.assignedTo ?? this.defaultAssigneeId),
+            ? (this.mergeAssigneeId ?? toValidUserId(task.assignedTo) ?? this.defaultAssigneeId)
+            : (toValidUserId(task.assignedTo) ?? this.defaultAssigneeId),
         }),
       ),
     };
@@ -281,8 +307,8 @@ export class PublishedPanelComponent implements OnChanges {
           description: task.description ?? '',
           statusId: task.statusId,
           assignedTo: isMergeTask(task.subject)
-            ? (this.mergeAssigneeId ?? task.assignedTo ?? null)
-            : (task.assignedTo ?? null),
+            ? (this.mergeAssigneeId ?? toValidUserId(task.assignedTo))
+            : toValidUserId(task.assignedTo),
         })),
       },
     });

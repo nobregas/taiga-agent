@@ -115,13 +115,19 @@
   background: var(--surface-muted);
 }
 
+.login-shell {
+  position: relative;
+  min-height: 100vh;
+}
+
 .sidebar {
   border-right: 1px solid var(--line);
   padding: 1.25rem 1rem;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
   background: var(--surface);
+  min-height: calc(100vh - 56px);
 }
 
 .brand {
@@ -279,6 +285,26 @@
 
 .workspace-switch app-select {
   width: 100%;
+}
+
+.app-version {
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--muted);
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.app-version--sidebar {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.app-version--login {
+  position: fixed;
+  right: 0.85rem;
+  bottom: 0.65rem;
 }
 
 .main {

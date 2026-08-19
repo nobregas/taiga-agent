@@ -5,7 +5,7 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { SelectComponent } from '../../components/select/select.component';
 import { Codebase, TaigaProjectOption, Workspace } from '../../models/settings.models';
-import { TaigaUser, memberDisplayName } from '../../models/draft.models';
+import { TaigaUser, memberDisplayName, toValidUserId } from '../../models/draft.models';
 import { ApiService } from '../../services/api.service';
 import { MetaService } from '../../services/meta.service';
 import { ToastService } from '../../services/toast.service';
@@ -219,7 +219,8 @@ export class WorkspacesComponent implements OnInit {
       name: value.name.trim(),
       taigaProjectId,
       taigaProjectSlug: value.taigaProjectSlug.trim() || null,
-      mergeAssigneeId: value.mergeAssigneeId,
+      // "Sem regra" must always persist as `null`, never as a falsy-but-not-null id like `0`.
+      mergeAssigneeId: toValidUserId(value.mergeAssigneeId),
     };
 
     this.savingWorkspace = true;
@@ -484,7 +485,7 @@ export class WorkspacesComponent implements OnInit {
         name: workspace.name,
         taigaProjectId: String(workspace.taigaProjectId),
         taigaProjectSlug: workspace.taigaProjectSlug ?? '',
-        mergeAssigneeId: workspace.mergeAssigneeId,
+        mergeAssigneeId: toValidUserId(workspace.mergeAssigneeId),
       },
       { emitEvent: false },
     );
@@ -507,7 +508,7 @@ export class WorkspacesComponent implements OnInit {
       name: value.name.trim(),
       taigaProjectId: String(value.taigaProjectId ?? '').trim(),
       taigaProjectSlug: value.taigaProjectSlug.trim(),
-      mergeAssigneeId: value.mergeAssigneeId ?? null,
+      mergeAssigneeId: toValidUserId(value.mergeAssigneeId),
     };
   }
 }

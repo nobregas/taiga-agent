@@ -15,6 +15,7 @@ import {
   isSubirPrTask,
   memberDisplayName,
   openTaskStatuses,
+  toValidUserId,
 } from '../../models/draft.models';
 
 export interface PublishedTaskFields {
@@ -61,11 +62,11 @@ export class TasksBoardComponent {
   }
 
   get defaultAssigneeId(): number | null {
-    return this.meta?.currentUser?.id ?? null;
+    return toValidUserId(this.meta?.currentUser?.id);
   }
 
   get mergeAssigneeId(): number | null {
-    return this.meta?.mergeAssigneeId ?? null;
+    return toValidUserId(this.meta?.mergeAssigneeId);
   }
 
   get mergeAssigneeLocked(): boolean {
@@ -407,12 +408,14 @@ export function createTaskFormGroup(
     published?: boolean;
   } = {},
 ): FormGroup {
+  const defaultAssigneeId = toValidUserId(options.defaultAssigneeId);
+  const mergeAssigneeId = toValidUserId(options.mergeAssigneeId);
   const assignedTo = isMergeTask(task.subject)
-    ? (options.mergeAssigneeId ?? task.assignedTo ?? options.defaultAssigneeId ?? null)
-    : (task.assignedTo ?? options.defaultAssigneeId ?? null);
+    ? (mergeAssigneeId ?? toValidUserId(task.assignedTo) ?? defaultAssigneeId)
+    : (toValidUserId(task.assignedTo) ?? defaultAssigneeId);
 
   const assignedToControl = fb.control<number | null>(assignedTo);
-  if (isMergeTask(task.subject) && options.mergeAssigneeId != null) {
+  if (isMergeTask(task.subject) && mergeAssigneeId != null) {
     assignedToControl.disable({ emitEvent: false });
   }
 

@@ -1,5 +1,6 @@
 import { getDatabase } from '../db/connection.js';
 import type { Workspace, WorkspaceRow } from '../db/types.js';
+import { toValidUserId } from '../utils/user-id.js';
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
   return {
@@ -8,7 +9,9 @@ function mapWorkspace(row: WorkspaceRow): Workspace {
     taigaProjectId: row.taiga_project_id,
     taigaProjectSlug: row.taiga_project_slug,
     defaultCodebaseId: row.default_codebase_id,
-    mergeAssigneeId: row.merge_assignee_id,
+    // Defensively normalize: a stale/corrupted `0` in the DB must never be treated as
+    // "assign merge tasks to user 0" — always coerce it back to "no rule configured".
+    mergeAssigneeId: toValidUserId(row.merge_assignee_id),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -52,7 +55,7 @@ export class WorkspaceRepository {
         input.name.trim(),
         input.taigaProjectId,
         input.taigaProjectSlug?.trim() || null,
-        input.mergeAssigneeId ?? null,
+        toValidUserId(input.mergeAssigneeId),
       );
 
     return this.getById(Number(result.lastInsertRowid))!;
@@ -80,7 +83,7 @@ export class WorkspaceRepository {
         input.taigaProjectId ?? current.taigaProjectId,
         input.taigaProjectSlug !== undefined ? input.taigaProjectSlug : current.taigaProjectSlug,
         input.defaultCodebaseId !== undefined ? input.defaultCodebaseId : current.defaultCodebaseId,
-        input.mergeAssigneeId !== undefined ? input.mergeAssigneeId : current.mergeAssigneeId,
+        input.mergeAssigneeId !== undefined ? toValidUserId(input.mergeAssigneeId) : current.mergeAssigneeId,
         id,
       );
 

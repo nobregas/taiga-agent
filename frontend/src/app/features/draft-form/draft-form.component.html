@@ -99,74 +99,86 @@
           ></textarea>
         </label>
 
-        <div class="field field--branch">
-          @if (meta?.gitlabConfigured) {
-            <small class="hint">Commits e diff da branch sao usados automaticamente na geracao.</small>
-            <div class="branch-existing-grid">
-              <label class="field">
-                <span>Branch</span>
-                <div class="autocomplete">
-                  <input
-                    formControlName="branch"
-                    placeholder="feat/minha-feature"
-                    (focus)="onBranchAutocompleteFocus('branch')"
-                    (input)="onBranchAutocompleteInput('branch')"
-                    (blur)="closeBranchSuggestions()"
-                  />
-                  @if (branchSuggestionsField === 'branch' && branchResults.length) {
-                    <div class="autocomplete-dropdown">
-                      @for (branch of branchResults; track branch) {
-                        <button type="button" class="result-item" (mousedown)="selectBranch(branch, 'branch')">
-                          {{ branch }}
-                        </button>
-                      }
-                    </div>
-                  }
-                </div>
-              </label>
-              <label class="field">
-                <span>Comparar com</span>
-                <div class="autocomplete">
-                  <input
-                    formControlName="gitlabCompareBase"
-                    placeholder="develop"
-                    (focus)="onBranchAutocompleteFocus('compareBase')"
-                    (input)="onBranchAutocompleteInput('compareBase')"
-                    (blur)="closeBranchSuggestions()"
-                  />
-                  @if (branchSuggestionsField === 'compareBase' && branchResults.length) {
-                    <div class="autocomplete-dropdown">
-                      @for (branch of branchResults; track branch) {
-                        <button type="button" class="result-item" (mousedown)="selectBranch(branch, 'compareBase')">
-                          {{ branch }}
-                        </button>
-                      }
-                    </div>
-                  }
-                </div>
-              </label>
-            </div>
-          } @else {
-            <span>Branch planejada</span>
-            <div class="prefix-row">
-              @for (prefix of branchPrefixes; track prefix) {
-                <button
-                  type="button"
-                  class="prefix-btn"
-                  [class.active]="selectedBranchPrefix === prefix"
-                  (click)="setBranchPrefix(prefix)"
-                >
-                  {{ prefix }}
-                </button>
-              }
-            </div>
-            <input formControlName="branch" [placeholder]="selectedBranchPrefix + '/minha-feature'" />
-          }
+        <label class="toggle">
+          <input type="checkbox" formControlName="implemented" />
+          <span>US já implementada (branch existente)</span>
+        </label>
 
-          @if (form.controls.branch.touched && form.controls.branch.invalid) {
-            <small class="field-error">Informe a branch</small>
-          }
-        </div>
+        @if (isImplemented) {
+          <div class="field field--branch">
+            @if (meta?.gitlabConfigured) {
+              <small class="hint">Commits e diff da branch sao usados automaticamente na geracao.</small>
+              <div class="branch-existing-grid">
+                <label class="field">
+                  <span>Branch</span>
+                  <div class="autocomplete">
+                    <input
+                      formControlName="branch"
+                      placeholder="feat/minha-feature"
+                      (focus)="onBranchAutocompleteFocus('branch')"
+                      (input)="onBranchAutocompleteInput('branch')"
+                      (blur)="closeBranchSuggestions()"
+                    />
+                    @if (branchSuggestionsField === 'branch' && branchResults.length) {
+                      <div class="autocomplete-dropdown">
+                        @for (branch of branchResults; track branch) {
+                          <button type="button" class="result-item" (mousedown)="selectBranch(branch, 'branch')">
+                            {{ branch }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                </label>
+                <label class="field">
+                  <span>Comparar com</span>
+                  <div class="autocomplete">
+                    <input
+                      formControlName="gitlabCompareBase"
+                      placeholder="develop"
+                      (focus)="onBranchAutocompleteFocus('compareBase')"
+                      (input)="onBranchAutocompleteInput('compareBase')"
+                      (blur)="closeBranchSuggestions()"
+                    />
+                    @if (branchSuggestionsField === 'compareBase' && branchResults.length) {
+                      <div class="autocomplete-dropdown">
+                        @for (branch of branchResults; track branch) {
+                          <button type="button" class="result-item" (mousedown)="selectBranch(branch, 'compareBase')">
+                            {{ branch }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
+                </label>
+              </div>
+            } @else {
+              <span>Branch planejada</span>
+              <div class="prefix-row">
+                @for (prefix of branchPrefixes; track prefix) {
+                  <button
+                    type="button"
+                    class="prefix-btn"
+                    [class.active]="selectedBranchPrefix === prefix"
+                    (click)="setBranchPrefix(prefix)"
+                  >
+                    {{ prefix }}
+                  </button>
+                }
+              </div>
+              <input formControlName="branch" [placeholder]="selectedBranchPrefix + '/minha-feature'" />
+            }
+
+            @if (form.controls.branch.touched && form.controls.branch.invalid) {
+              <small class="field-error">Informe a branch</small>
+            }
+          </div>
+        } @else {
+          <p class="hint branch-optional-hint">
+            Sem branch: a US sera criada apenas para planejamento, sem contexto de GitLab. Marque a opcao acima
+            quando ja existir uma branch para esta US.
+          </p>
+        }
       }
 
       @if (activeTab === 'detalhes') {

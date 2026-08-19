@@ -37,14 +37,17 @@ export function tagPlanToTaigaTags(
   plan: StructuredTagPlan,
   customColors?: Record<string, string>,
 ): TagWithColor[] {
-  return (Object.keys(plan) as Array<keyof StructuredTagPlan>).map((category) => {
-    const name = plan[category].trim().toLowerCase();
-    return {
-      category,
-      name,
-      color: customColors?.[name] ?? customColors?.[plan[category]] ?? TAG_CATEGORY_COLORS[category],
-    };
-  });
+  return (Object.keys(plan) as Array<keyof StructuredTagPlan>)
+    .map((category) => {
+      const name = plan[category].trim().toLowerCase();
+      return {
+        category,
+        name,
+        color: customColors?.[name] ?? customColors?.[plan[category]] ?? TAG_CATEGORY_COLORS[category],
+      };
+    })
+    // Optional categories (currently only `dominio`) may be blank; never forward an empty tag to Taiga.
+    .filter((tag) => tag.name.length > 0);
 }
 
 export function normalizeHexColor(color: string | null | undefined): string | null {

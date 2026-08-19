@@ -2,18 +2,15 @@ import { Router } from 'express';
 import { settingsRepository } from '../repositories/settings.repository.js';
 import { workspaceRepository } from '../repositories/workspace.repository.js';
 import { runtimeConfig } from '../services/runtime-config.service.js';
+import { toValidUserId } from '../utils/user-id.js';
 
 function parseNullableId(value: unknown): number | null | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  if (value === null || value === '') {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  // Treats `null`, `''`, whitespace, `0`, negative numbers and NaN all as "no id".
+  return toValidUserId(value);
 }
 
 export const workspacesRouter = Router();

@@ -7,6 +7,7 @@ import { TasksBoardComponent, createTaskFormGroup } from '../tasks-board/tasks-b
 import {
   BranchContextPreview,
   Draft,
+  OPTIONAL_TAG_CATEGORIES,
   ProjectMeta,
   TAG_CATEGORIES,
   TAG_CATEGORY_LABELS,
@@ -20,6 +21,7 @@ import {
   isMergeTask,
   resolveUserStoryStatusId,
   tagColorFor,
+  toValidUserId,
 } from '../../models/draft.models';
 
 @Component({
@@ -50,6 +52,7 @@ export class ReviewPanelComponent {
   tagCategoryLabels = TAG_CATEGORY_LABELS;
   tagColorOverrides: Record<string, string> = {};
   private sourceDraft: Draft | null = null;
+  private readonly optionalTagCategories: readonly TagCategory[] = OPTIONAL_TAG_CATEGORIES;
 
   @Input({ required: true })
   set draft(value: Draft | null) {
@@ -74,7 +77,9 @@ export class ReviewPanelComponent {
       contexto: [value.contexto, Validators.required],
       objetivo: [value.objetivo, Validators.required],
       criteriosAceite: [formatAcceptanceCriteria(value.criteriosAceite)],
-      branch: [value.branch, Validators.required],
+      // Branch is only required when the US is marked as already implemented —
+      // mirrors the conditional validator in draft-form.component.ts.
+      branch: [value.branch, this.isBranchRequired ? Validators.required : []],
       usStatusId: [defaultUsStatus ?? 0],
       milestoneId: [defaultSprintId],
       gitNotes: [value.gitNotes ?? ''],
@@ -82,7 +87,8 @@ export class ReviewPanelComponent {
         aplicacao: [value.tagPlan.aplicacao, Validators.required],
         escopo: [value.tagPlan.escopo, Validators.required],
         tipo: [value.tagPlan.tipo, Validators.required],
-        dominio: [value.tagPlan.dominio, Validators.required],
+        // Dominio is the only optional tag category — it can be cleared via the UI.
+        dominio: [value.tagPlan.dominio],
       }),
       tasks: this.fb.array(
         preparedTasks.map((task) =>
@@ -147,12 +153,20 @@ export class ReviewPanelComponent {
     return this.meta?.tags ?? [];
   }
 
+  get isImplemented(): boolean {
+    return this.sourceDraft?.implemented !== false;
+  }
+
+  get isBranchRequired(): boolean {
+    return this.isImplemented;
+  }
+
   get defaultAssigneeId(): number | null {
-    return this.meta?.currentUser?.id ?? null;
+    return toValidUserId(this.meta?.currentUser?.id);
   }
 
   get mergeAssigneeId(): number | null {
-    return this.meta?.mergeAssigneeId ?? null;
+    return toValidUserId(this.meta?.mergeAssigneeId);
   }
 
   setTab(tab: 'us' | 'tasks'): void {
@@ -163,6 +177,21 @@ export class ReviewPanelComponent {
     const plan = this.form.get('tagPlan')?.getRawValue();
     if (!plan) return '#737373';
     return tagColorFor(plan, category, this.tagColorOverrides, this.meta?.tagColors);
+  }
+
+  isTagOptional(category: TagCategory): boolean {
+    return this.optionalTagCategories.includes(category);
+  }
+
+  isTagClearable(category: TagCategory): boolean {
+    return this.isTagOptional(category) && Boolean(this.form.get('tagPlan')?.get(category)?.value?.trim());
+  }
+
+  clearTag(category: TagCategory): void {
+    if (!this.isTagOptional(category)) {
+      return;
+    }
+    this.form.get('tagPlan')?.get(category)?.setValue('');
   }
 
   onTagNameChange(category: TagCategory): void {
@@ -236,6 +265,7 @@ export class ReviewPanelComponent {
       gitNotes: value.gitNotes || undefined,
       gitlabEnrichment: this.sourceDraft?.gitlabEnrichment,
       mode: this.sourceDraft?.mode,
+      implemented: this.sourceDraft?.implemented,
       existingUserStoryId: this.sourceDraft?.existingUserStoryId,
       existingUserStoryRef: this.sourceDraft?.existingUserStoryRef,
       tasks: value.tasks.map(
@@ -252,8 +282,8 @@ export class ReviewPanelComponent {
           description: task.description,
           statusId: task.statusId,
           assignedTo: isMergeTask(task.subject)
-            ? (this.mergeAssigneeId ?? task.assignedTo ?? this.defaultAssigneeId)
-            : (task.assignedTo ?? this.defaultAssigneeId),
+            ? (this.mergeAssigneeId ?? toValidUserId(task.assignedTo) ?? this.defaultAssigneeId)
+            : (toValidUserId(task.assignedTo) ?? this.defaultAssigneeId),
           gitlabInformed: task.gitlabInformed,
           branchComplete: task.branchComplete,
           inferredFrom: task.inferredFrom,

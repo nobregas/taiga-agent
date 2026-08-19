@@ -62,8 +62,13 @@
         </div>
 
         <label class="field">
-          <span>Branch</span>
-          <input formControlName="branch" />
+          <span>
+            Branch
+            @if (!isImplemented) {
+              <small class="tag-optional-hint">(opcional — US ainda nao implementada)</small>
+            }
+          </span>
+          <input formControlName="branch" placeholder="A definir" />
         </label>
 
         <div class="field" formGroupName="tagPlan">
@@ -72,7 +77,12 @@
           <div class="tag-plan-row">
             @for (category of tagCategories; track category) {
               <label class="tag-plan-item">
-                <span>{{ tagCategoryLabels[category] }}</span>
+                <span>
+                  {{ tagCategoryLabels[category] }}
+                  @if (isTagOptional(category)) {
+                    <small class="tag-optional-hint">(opcional)</small>
+                  }
+                </span>
                 <div class="tag-input-row">
                   <input
                     type="color"
@@ -87,6 +97,17 @@
                     (change)="onTagNameChange(category)"
                     (blur)="onTagNameChange(category)"
                   />
+                  @if (isTagClearable(category)) {
+                    <button
+                      type="button"
+                      class="tag-clear-btn"
+                      (click)="clearTag(category)"
+                      [attr.aria-label]="'Limpar tag ' + tagCategoryLabels[category]"
+                      title="Limpar"
+                    >
+                      ×
+                    </button>
+                  }
                 </div>
               </label>
             }

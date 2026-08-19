@@ -3,6 +3,7 @@ import type { TaigaMilestone } from '../utils/sprints.js';
 import { pickDefaultSprintId } from '../utils/sprints.js';
 import { defaultOpenStatusId, findReadyForDevStatusId } from '../utils/task-status.js';
 import { HttpError } from '../utils/http-error.js';
+import { toValidUserId } from '../utils/user-id.js';
 
 export interface TaigaStatus {
   id: number;
@@ -561,7 +562,9 @@ export class TaigaService {
 
     const meta = await this.getProjectMeta(projectId);
     const readyStatusId = findReadyForDevStatusId(meta.userStoryStatuses);
-    const assignedTo = input.assignedTo ?? meta.currentUser?.id;
+    // Never forward an invalid id (0, negative, NaN) to Taiga — it fails with
+    // "Invalid pk \"0\" - object does not exist." on the assigned_to field.
+    const assignedTo = toValidUserId(input.assignedTo) ?? toValidUserId(meta.currentUser?.id);
 
     return this.request<TaigaUserStory>('/userstories', {
       method: 'POST',
@@ -572,7 +575,7 @@ export class TaigaService {
         tags: input.tags,
         status: input.statusId ?? readyStatusId,
         milestone: input.milestoneId ?? null,
-        assigned_to: assignedTo ?? null,
+        assigned_to: assignedTo,
       }),
     });
   }
@@ -592,7 +595,12 @@ export class TaigaService {
 
     const meta = await this.getProjectMeta(projectId);
     const openStatusId = defaultOpenStatusId(meta.taskStatuses);
-    const assignedTo = input.assignedTo === undefined ? (meta.currentUser?.id ?? null) : input.assignedTo;
+    // Sanitize regardless of source: an explicit-but-invalid id (e.g. a stale 0 coming
+    // from a misconfigured merge-assignee) must never reach Taiga's assigned_to field.
+    const assignedTo =
+      input.assignedTo === undefined
+        ? toValidUserId(meta.currentUser?.id)
+        : toValidUserId(input.assignedTo);
 
     return this.request<TaigaTask>('/tasks', {
       method: 'POST',
@@ -615,10 +623,10 @@ export class TaigaService {
     defaultStatusId?: number;
   }): Promise<TaigaTask[]> {
     const created: TaigaTask[] = [];
-    let fallbackAssignee = input.assignedTo;
-    if (fallbackAssignee === undefined) {
+    let fallbackAssignee = toValidUserId(input.assignedTo);
+    if (input.assignedTo === undefined) {
       try {
-        fallbackAssignee = (await this.getCurrentUser()).id;
+        fallbackAssignee = toValidUserId((await this.getCurrentUser()).id);
       } catch {
         fallbackAssignee = null;
       }
@@ -745,7 +753,7 @@ export class TaigaService {
         ...(input.subject ? { subject: input.subject } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.statusId ? { status: input.statusId } : {}),
-        ...(input.assignedTo !== undefined ? { assigned_to: input.assignedTo } : {}),
+        ...(input.assignedTo !== undefined ? { assigned_to: toValidUserId(input.assignedTo) } : {}),
         ...(input.version ? { version: input.version } : {}),
       }),
     });

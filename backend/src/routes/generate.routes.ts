@@ -7,6 +7,7 @@ import { runtimeConfig } from '../services/runtime-config.service.js';
 import { taigaService } from '../services/taiga.service.js';
 import { ensureDefaultFinalTasks } from '../utils/default-tasks.js';
 import { areAllTasksComplete, resolveUserStoryStatusId } from '../utils/task-status.js';
+import { toValidUserId } from '../utils/user-id.js';
 
 export const generateRouter = Router();
 
@@ -57,8 +58,8 @@ generateRouter.post('/', async (req, res, next) => {
 
     const workspace = runtimeConfig.getActiveWorkspace();
     draft.tasks = ensureDefaultFinalTasks(draft.tasks, {
-      defaultAssigneeId: meta.currentUser?.id ?? null,
-      mergeAssigneeId: workspace?.mergeAssigneeId ?? null,
+      defaultAssigneeId: toValidUserId(meta.currentUser?.id),
+      mergeAssigneeId: toValidUserId(workspace?.mergeAssigneeId),
     });
 
     draft.usStatusId = resolveUserStoryStatusId(meta.userStoryStatuses, {

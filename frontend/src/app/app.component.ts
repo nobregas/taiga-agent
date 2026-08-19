@@ -8,6 +8,7 @@ import { ProjectMeta } from './models/draft.models';
 import { Workspace } from './models/settings.models';
 import { AuthService } from './services/auth.service';
 import { MetaService } from './services/meta.service';
+import { ApiService } from './services/api.service';
 import { ToastService } from './services/toast.service';
 
 @Component({
@@ -19,10 +20,12 @@ import { ToastService } from './services/toast.service';
 })
 export class AppComponent implements OnInit {
   private readonly metaService = inject(MetaService);
+  private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   readonly auth = inject(AuthService);
 
+  appVersion = '';
   meta: ProjectMeta | null = null;
   workspaces: Workspace[] = [];
   switchingWorkspace = false;
@@ -37,6 +40,7 @@ export class AppComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.loadAppVersion();
     this.isLoginRoute = this.router.url.startsWith('/login');
     this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe((event) => {
       this.isLoginRoute = event.urlAfterRedirects.startsWith('/login');
@@ -120,6 +124,21 @@ export class AppComponent implements OnInit {
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.userMenuOpen = false;
+  }
+
+  private loadAppVersion(): void {
+    this.api.health().subscribe({
+      next: (health) => {
+        const version = health.version?.trim();
+        if (!version) {
+          return;
+        }
+        this.appVersion = version.startsWith('v') ? version : `v${version}`;
+      },
+      error: () => {
+        // Version badge is optional; ignore if backend is still starting.
+      },
+    });
   }
 
   private loadAppData(): void {

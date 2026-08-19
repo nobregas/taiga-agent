@@ -13,6 +13,7 @@ import { authRouter } from './routes/auth.routes.js';
 import { runtimeConfig } from './services/runtime-config.service.js';
 import { formatErrorMessage } from './utils/error-message.js';
 import { HttpError } from './utils/http-error.js';
+import { getAppVersion } from './version.js';
 
 function mountFrontend(app: express.Express): void {
   const indexHtml = path.join(config.frontendDist, 'index.html');
@@ -50,6 +51,7 @@ export function createApp() {
     const settings = runtimeConfig.getSettings();
     res.json({
       status: 'ok',
+      version: getAppVersion(),
       hasActiveWorkspace: runtimeConfig.hasActiveWorkspace(),
       hasDefaultCodebase: runtimeConfig.hasDefaultCodebase(),
       settingsConfigured: Boolean(settings.geminiApiKey && runtimeConfig.isTaigaAuthenticated()),

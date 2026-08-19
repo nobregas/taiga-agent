@@ -75,7 +75,7 @@
 
 .us-header-row {
   display: grid;
-  grid-template-columns: 7.5rem 1fr;
+  grid-template-columns: 10.5rem 1fr;
   gap: 0.75rem;
   align-items: start;
   margin-bottom: 1rem;
@@ -84,7 +84,7 @@
 
 .field--escopo input {
   width: 100%;
-  max-width: 7.5rem;
+  max-width: 10.5rem;
 }
 
 .field {
@@ -139,6 +139,12 @@ textarea:focus {
   min-width: 4.25rem;
 }
 
+.tag-optional-hint {
+  font-size: 0.625rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .tag-input-row input:not([type='color']) {
   width: 7.5rem;
   max-width: 7.5rem;
@@ -155,6 +161,28 @@ textarea:focus {
   border-radius: 6px;
   background: var(--surface);
   cursor: pointer;
+}
+
+.tag-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.tag-clear-btn:hover {
+  background: var(--surface-muted);
+  color: var(--text);
 }
 
 .field--sprint {
@@ -480,7 +508,7 @@ textarea:focus {
   }
 
   .us-header-row {
-    grid-template-columns: 6.5rem 1fr;
+    grid-template-columns: 8.5rem 1fr;
   }
 
   .task-meta-row {
@@ -488,7 +516,7 @@ textarea:focus {
   }
 
   .field--escopo input {
-    max-width: 6.5rem;
+    max-width: 8.5rem;
   }
 
   .tabs {

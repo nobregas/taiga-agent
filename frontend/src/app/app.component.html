@@ -1,5 +1,10 @@
 @if (isLoginRoute) {
-  <router-outlet />
+  <div class="login-shell">
+    <router-outlet />
+    @if (appVersion) {
+      <span class="app-version app-version--login" aria-hidden="true">{{ appVersion }}</span>
+    }
+  </div>
 } @else {
   <div class="app">
     <header class="app-header">
@@ -79,6 +84,10 @@
             <span [class.on]="meta.gitlabConfigured">GitLab</span>
           </div>
         </div>
+      }
+
+      @if (appVersion) {
+        <span class="app-version app-version--sidebar" aria-hidden="true">{{ appVersion }}</span>
       }
     </aside>
 

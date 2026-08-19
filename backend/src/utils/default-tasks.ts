@@ -1,4 +1,5 @@
 import type { TaskDraft } from '../schemas/draft.schema.js';
+import { toValidUserId } from './user-id.js';
 
 export const DEFAULT_FINAL_TASKS = {
   subirPr: 'Subir PR',
@@ -52,11 +53,7 @@ export function isDefaultFinalTask(subject: string): boolean {
   return isSubirPrTask(subject) || isMergeTask(subject);
 }
 
-function withAssignee(task: TaskDraft, assignedTo: number | null | undefined): TaskDraft {
-  if (assignedTo == null) {
-    return task.assignedTo === undefined ? { ...task, assignedTo: null } : task;
-  }
-
+function withAssignee(task: TaskDraft, assignedTo: number | null): TaskDraft {
   return { ...task, assignedTo };
 }
 
@@ -64,16 +61,23 @@ export function applyDefaultAssignees(
   tasks: TaskDraft[],
   options: EnsureDefaultTasksOptions,
 ): TaskDraft[] {
-  const defaultAssigneeId = options.defaultAssigneeId ?? null;
-  const mergeAssigneeId = options.mergeAssigneeId ?? null;
+  const defaultAssigneeId = toValidUserId(options.defaultAssigneeId);
+  const mergeAssigneeId = toValidUserId(options.mergeAssigneeId);
 
   return tasks.map((task) => {
     if (isMergeTask(task.subject) && mergeAssigneeId != null) {
-      return { ...task, assignedTo: mergeAssigneeId };
+      return withAssignee(task, mergeAssigneeId);
     }
 
     if (task.assignedTo === undefined) {
       return withAssignee(task, defaultAssigneeId);
+    }
+
+    if (task.assignedTo !== null) {
+      // Explicit but invalid ids (e.g. a stale `0`) fall back to the default assignee
+      // instead of being forwarded as-is to Taiga.
+      const sanitized = toValidUserId(task.assignedTo);
+      return withAssignee(task, sanitized ?? defaultAssigneeId);
     }
 
     return task;
@@ -84,8 +88,8 @@ export function ensureDefaultFinalTasks(
   tasks: TaskDraft[],
   options: EnsureDefaultTasksOptions = {},
 ): TaskDraft[] {
-  const defaultAssigneeId = options.defaultAssigneeId ?? null;
-  const mergeAssigneeId = options.mergeAssigneeId ?? defaultAssigneeId;
+  const defaultAssigneeId = toValidUserId(options.defaultAssigneeId);
+  const mergeAssigneeId = toValidUserId(options.mergeAssigneeId) ?? defaultAssigneeId;
 
   const assigned = applyDefaultAssignees(tasks, options);
   const work: TaskDraft[] = [];

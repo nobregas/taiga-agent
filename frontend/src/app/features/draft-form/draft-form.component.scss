@@ -96,7 +96,7 @@
 
 .us-header-row {
   display: grid;
-  grid-template-columns: 7.5rem 1fr;
+  grid-template-columns: 10.5rem 1fr;
   gap: 0.75rem;
   align-items: start;
 }
@@ -197,6 +197,10 @@
   margin-top: 0.25rem;
 }
 
+.branch-optional-hint {
+  margin: 0;
+}
+
 .branch-existing-grid {
   display: grid;
   grid-template-columns: 1fr minmax(8rem, 0.55fr);
@@ -238,7 +242,7 @@
 
 .field--escopo input {
   width: 100%;
-  max-width: 7.5rem;
+  max-width: 10.5rem;
 }
 
 .field--repositorio {
@@ -459,11 +463,11 @@ textarea:focus {
   }
 
   .us-header-row {
-    grid-template-columns: 6.5rem 1fr;
+    grid-template-columns: 8.5rem 1fr;
   }
 
   .field--escopo input {
-    max-width: 6.5rem;
+    max-width: 8.5rem;
   }
 
   .branch-existing-grid {

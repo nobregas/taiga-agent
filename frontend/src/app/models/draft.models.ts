@@ -11,6 +11,13 @@ export interface StructuredTagPlan {
 
 export const TAG_CATEGORIES: TagCategory[] = ['aplicacao', 'escopo', 'tipo', 'dominio'];
 
+/**
+ * Tag categories that may be left blank. Keep this in sync with the optional
+ * categories in `structuredTagPlanSchema` on the backend — today only `dominio`.
+ * Shared between review-panel and published-panel so both stay consistent.
+ */
+export const OPTIONAL_TAG_CATEGORIES: readonly TagCategory[] = ['dominio'];
+
 export const TAG_CATEGORY_LABELS: Record<TagCategory, string> = {
   aplicacao: 'Aplicacao',
   escopo: 'Escopo',
@@ -60,6 +67,9 @@ export interface Draft {
   gitNotes?: string;
   gitlabEnrichment?: GitlabEnrichmentMeta;
   mode?: GenerationMode;
+  // Whether this US already has a real/existing branch. When false, `branch` may
+  // be empty and the GitLab-enrichment UI/flow is skipped entirely.
+  implemented?: boolean;
   existingUserStoryId?: number;
   existingUserStoryRef?: number;
   codebaseId?: number;
@@ -83,6 +93,7 @@ export interface GenerateRequest {
   existingUserStoryRef?: number;
   codebaseId?: number;
   repositoryName?: string;
+  implemented?: boolean;
 }
 
 export interface GenerateResponse {
@@ -231,6 +242,28 @@ export type WizardStep = 'create' | 'review' | 'done';
 
 export const BRANCH_PREFIXES = ['feat', 'fix', 'test', 'chore', 'hotfix', 'release', 'docs', 'refactor'] as const;
 
+/**
+ * Normalizes a candidate Taiga user id.
+ *
+ * Taiga (Django) primary keys start at 1, so `0`, negative numbers, `NaN` and
+ * anything non-finite can never refer to a real user. Treat all of those the
+ * same as "no id" (`null`) so we never send e.g. `assignedTo: 0` to the backend,
+ * which would forward it to Taiga's API and fail with something like
+ * `Invalid pk "0" - object does not exist.`
+ */
+export function toValidUserId(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.trunc(parsed);
+}
+
 export function flattenTagPlan(plan: StructuredTagPlan): string[] {
   return [plan.aplicacao, plan.escopo, plan.tipo, plan.dominio]
     .map((tag) => tag.trim().toLowerCase())
@@ -310,6 +343,10 @@ export function buildUsDescription(
   const repositorySection = draft.repositoryName?.trim()
     ? `\n\n(Repositório)\n${draft.repositoryName.trim()}`
     : '';
+  // A US may not have a branch yet (not implemented) — show a human placeholder
+  // instead of an empty section, while keeping the "(Branch)" marker that
+  // parseUsDescription()/validateUsDescription() rely on.
+  const branchSection = draft.branch.trim() || 'A definir';
 
   return `(Contexto)
 ${draft.contexto.trim()}
@@ -321,7 +358,7 @@ ${draft.objetivo.trim()}
 ${criterios}
 
 (Branch)
-${draft.branch.trim()}${repositorySection}`;
+${branchSection}${repositorySection}`;
 }
 
 export function parseUsDescription(description: string): {
@@ -588,9 +625,11 @@ export function buildManualDraft(
   const titulo = seed?.titulo?.trim() || 'Nova user story';
   const contextoGeral = seed?.contextoGeral?.trim() || 'A definir';
   const prefix = seed?.branchPrefix ?? 'feat';
-  const branch = seed?.branch?.trim() || `${prefix}/${slugifyBranchTitle(titulo)}`;
-  const defaultAssigneeId = meta?.currentUser?.id ?? null;
-  const mergeAssigneeId = meta?.mergeAssigneeId ?? null;
+  // Not implemented (default) => no branch to fabricate; keep it genuinely empty.
+  const implemented = Boolean(seed?.implemented);
+  const branch = implemented ? seed?.branch?.trim() || `${prefix}/${slugifyBranchTitle(titulo)}` : '';
+  const defaultAssigneeId = toValidUserId(meta?.currentUser?.id);
+  const mergeAssigneeId = toValidUserId(meta?.mergeAssigneeId);
 
   const callTasks = (seed?.tasksFromCall ?? '')
     .split('\n')
@@ -629,6 +668,7 @@ export function buildManualDraft(
     milestoneId: meta?.defaultSprintId ?? null,
     tasks,
     mode: seed?.mode === 'existing_us' ? 'new_us' : (seed?.mode ?? 'new_us'),
+    implemented,
     codebaseId: seed?.codebaseId,
     repositoryName: seed?.repositoryName,
   };
@@ -638,8 +678,10 @@ export function ensureDefaultFinalTasks(
   tasks: TaskDraft[],
   options: { defaultAssigneeId?: number | null; mergeAssigneeId?: number | null } = {},
 ): TaskDraft[] {
-  const defaultAssigneeId = options.defaultAssigneeId ?? null;
-  const mergeAssigneeId = options.mergeAssigneeId ?? defaultAssigneeId;
+  // Normalize once so `0`/negative/NaN ids (e.g. a stale merge-assignee setting)
+  // can never leak into a task's assignedTo and reach Taiga's API.
+  const defaultAssigneeId = toValidUserId(options.defaultAssigneeId);
+  const mergeAssigneeId = toValidUserId(options.mergeAssigneeId) ?? defaultAssigneeId;
   const work: TaskDraft[] = [];
   let subirPr: TaskDraft | undefined;
   let merge: TaskDraft | undefined;
@@ -657,7 +699,7 @@ export function ensureDefaultFinalTasks(
         merge = {
           ...task,
           subject: DEFAULT_FINAL_TASKS.merge,
-          assignedTo: mergeAssigneeId ?? task.assignedTo ?? defaultAssigneeId,
+          assignedTo: mergeAssigneeId ?? toValidUserId(task.assignedTo) ?? defaultAssigneeId,
         };
       }
       continue;
@@ -665,7 +707,7 @@ export function ensureDefaultFinalTasks(
 
     work.push({
       ...task,
-      assignedTo: task.assignedTo ?? defaultAssigneeId,
+      assignedTo: toValidUserId(task.assignedTo) ?? defaultAssigneeId,
     });
   }
 
@@ -687,6 +729,6 @@ export function ensureDefaultFinalTasks(
   return work.map((task) =>
     isMergeTask(task.subject) && mergeAssigneeId != null
       ? { ...task, assignedTo: mergeAssigneeId }
-      : { ...task, assignedTo: task.assignedTo ?? defaultAssigneeId },
+      : { ...task, assignedTo: toValidUserId(task.assignedTo) ?? defaultAssigneeId },
   );
 }

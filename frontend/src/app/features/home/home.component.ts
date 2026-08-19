@@ -24,6 +24,7 @@ import {
   PublishResponse,
   WizardStep,
   buildManualDraft,
+  toValidUserId,
 } from '../../models/draft.models';
 
 @Component({
@@ -219,7 +220,7 @@ export class HomeComponent implements OnInit, OnDestroy {
           subject: task.subject,
           description: task.description,
           statusId: task.statusId,
-          assignedTo: task.assignedTo ?? null,
+          assignedTo: toValidUserId(task.assignedTo),
         })),
       })
       .subscribe({

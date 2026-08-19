@@ -18,7 +18,8 @@ export const structuredTagPlanSchema = z.object({
   aplicacao: z.string().min(1),
   escopo: z.string().min(1),
   tipo: z.string().min(1),
-  dominio: z.string().min(1),
+  // Dominio is the only optional tag category: it may be cleared by the user in the review panel.
+  dominio: z.string().default(''),
 });
 
 export const tagColorsSchema = z.record(z.string()).optional();
@@ -69,7 +70,8 @@ export const draftSchema = z.object({
       const formatted = formatAcceptanceCriteria(value);
       return formatted || null;
     }),
-  branch: z.string().min(1),
+  // Empty when `implemented` is false — a US may be planned before any branch exists.
+  branch: z.string(),
   tags: z.array(z.string()),
   tagPlan: structuredTagPlanSchema,
   tagColors: tagColorsSchema,
@@ -79,6 +81,9 @@ export const draftSchema = z.object({
   gitNotes: z.string().optional(),
   gitlabEnrichment: gitlabEnrichmentSchema.optional(),
   mode: z.enum(['new_us', 'existing_us', 'retrospective']).optional(),
+  // Whether this US already has a real/existing branch. Defaults to true (the
+  // historical, pre-flag behavior) so callers that omit it keep requiring a branch.
+  implemented: z.boolean().optional(),
   existingUserStoryId: z.number().optional(),
   existingUserStoryRef: z.number().optional(),
   codebaseId: z.number().optional(),
@@ -107,6 +112,9 @@ export const generateRequestSchema = z
     existingUserStoryRef: z.number().optional(),
     codebaseId: z.number().optional(),
     repositoryName: z.string().optional(),
+    // Whether this US already has a real/existing branch. Defaults to true (the
+    // historical, pre-flag behavior) so callers that omit it keep requiring a branch.
+    implemented: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.mode !== 'existing_us' && !data.contextoGeral?.trim()) {
@@ -116,7 +124,12 @@ export const generateRequestSchema = z
         path: ['contextoGeral'],
       });
     }
-    if (data.mode !== 'existing_us' && !data.branch?.trim()) {
+    // Retrospective mode always analyzes a real branch. For new_us, only require a
+    // branch when the user explicitly marked the US as already implemented — an
+    // explicit `implemented: false` is the only way to opt out (omitted/true keeps
+    // the original, always-required behavior for backwards compatibility).
+    const branchRequired = data.mode === 'retrospective' || (data.mode === 'new_us' && data.implemented !== false);
+    if (branchRequired && !data.branch?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Branch planejada e obrigatoria',
@@ -161,6 +174,10 @@ export function buildUsDescription(
   const repositorySection = draft.repositoryName?.trim()
     ? `\n\n(Repositório)\n${draft.repositoryName.trim()}`
     : '';
+  // A US may not have a branch yet (not implemented) — render a human placeholder
+  // instead of leaving the section blank, while still keeping the "(Branch)" marker
+  // that validateUsDescription() requires.
+  const branchSection = draft.branch.trim() || 'A definir';
 
   return `(Contexto)
 ${draft.contexto.trim()}
@@ -172,7 +189,7 @@ ${draft.objetivo.trim()}
 ${criterios}
 
 (Branch)
-${draft.branch.trim()}${repositorySection}`;
+${branchSection}${repositorySection}`;
 }
 
 export function validateUsDescription(description: string): boolean {
@@ -219,7 +236,10 @@ export function finalizeDraft(raw: Draft, usEscopo?: string): Draft {
     throw new Error('Invalid US subject format');
   }
 
-  const branch = normalizeBranch(raw.branch);
+  // Only fabricate a placeholder branch name when the US is meant to have one.
+  // When explicitly not implemented, keep it truly empty instead of inventing
+  // something like "feat/nova-feature" that could be mistaken for a real branch.
+  const branch = raw.implemented === false ? '' : normalizeBranch(raw.branch);
   const description = buildUsDescription({ ...raw, branch });
   if (!validateUsDescription(description)) {
     throw new Error('Invalid US description sections');

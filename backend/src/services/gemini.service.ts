@@ -14,6 +14,7 @@ import { defaultOpenStatusId, findDoneStatusId } from '../utils/task-status.js';
 import { buildTagStringSchema, mergeTagColors, resolveTagPlanAllowingNew } from '../utils/tags.js';
 import { formatAcceptanceCriteria } from '../utils/acceptance-criteria.js';
 import { ensureDefaultFinalTasks } from '../utils/default-tasks.js';
+import { toValidUserId } from '../utils/user-id.js';
 import { runtimeConfig } from './runtime-config.service.js';
 
 function buildAiResponseSchema() {
@@ -116,7 +117,11 @@ export class GeminiService {
     if (request.criteriosAceite) {
       parts.push(`Criterios de aceite informados: ${request.criteriosAceite}`);
     }
-    if (request.branch) {
+    if (request.implemented === false) {
+      parts.push(
+        'US ainda nao implementada: nao existe branch. Nao mencione uma branch especifica no contexto/objetivo.',
+      );
+    } else if (request.branch) {
       parts.push(`Branch informada: ${request.branch}`);
     } else if (request.titulo) {
       parts.push(`Branch sugerida: ${prefix}/${slugifyBranch(request.titulo)}`);
@@ -204,6 +209,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       titulo,
       contextoGeral: parsed.contextoGeral || request.contextoGeral,
       mode: request.mode,
+      implemented: request.implemented,
       existingUserStoryId: request.existingUserStoryId,
       existingUserStoryRef: request.existingUserStoryRef,
       codebaseId: codebase?.id ?? codebaseId ?? request.codebaseId,
@@ -218,7 +224,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
       tags: parsed.tags ?? [],
       tasks: ensureDefaultFinalTasks(
         this.applyTaskBranchMetadata(parsed.tasks ?? [], meta, Boolean(branchContextText)),
-        { defaultAssigneeId: meta.currentUser?.id ?? null },
+        { defaultAssigneeId: toValidUserId(meta.currentUser?.id) },
       ),
     });
 

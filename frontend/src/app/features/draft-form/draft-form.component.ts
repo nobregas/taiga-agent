@@ -60,6 +60,8 @@ export class DraftFormComponent implements OnInit, OnChanges {
     contextoGeral: ['', Validators.required],
     objetivo: [''],
     criteriosAceite: [''],
+    // Default OFF: most USs start out as pure planning, before any branch exists.
+    implemented: [false],
     branch: [''],
     gitlabCompareBase: ['develop'],
     tasksFromCall: [''],
@@ -72,6 +74,9 @@ export class DraftFormComponent implements OnInit, OnChanges {
   ngOnInit(): void {
     this.applyModeValidators(this.form.controls.mode.value);
     this.form.controls.mode.valueChanges.subscribe((mode) => this.applyModeValidators(mode));
+    this.form.controls.implemented.valueChanges.subscribe(() =>
+      this.applyModeValidators(this.form.controls.mode.value),
+    );
     this.form.controls.codebaseId.valueChanges.subscribe(() => {
       this.branchResults = [];
       this.applyCodebaseDefaults();
@@ -120,6 +125,10 @@ export class DraftFormComponent implements OnInit, OnChanges {
 
   get isExistingUsMode(): boolean {
     return this.form.controls.mode.value === 'existing_us';
+  }
+
+  get isImplemented(): boolean {
+    return this.form.controls.implemented.value;
   }
 
   get selectedCodebase() {
@@ -175,7 +184,13 @@ export class DraftFormComponent implements OnInit, OnChanges {
         Validators.pattern(/^\d+$/),
       ]);
     } else {
-      this.form.controls.branch.setValidators([Validators.required, Validators.minLength(3)]);
+      // Branch is only required once the user marks the US as already implemented
+      // (i.e. there's a real/existing branch to reference) — otherwise it's pure planning.
+      if (this.form.controls.implemented.value) {
+        this.form.controls.branch.setValidators([Validators.required, Validators.minLength(3)]);
+      } else {
+        this.form.controls.branch.clearValidators();
+      }
       this.form.controls.existingUserStoryRef.clearValidators();
     }
 
@@ -358,12 +373,14 @@ export class DraftFormComponent implements OnInit, OnChanges {
       ? Number.parseInt(value.existingUserStoryRef, 10)
       : undefined;
 
-    let branch = value.branch.trim();
+    const implemented = value.implemented;
+    // Not implemented => no real branch to send, regardless of any stray field value.
+    let branch = implemented ? value.branch.trim() : '';
     if (branch && !this.gitlabConfigured && !branch.includes('/')) {
       branch = `${this.selectedBranchPrefix}/${branch}`;
     }
 
-    const enrichWithGitlab = this.gitlabConfigured && Boolean(branch);
+    const enrichWithGitlab = implemented && this.gitlabConfigured && Boolean(branch);
     const codebase = this.selectedCodebase;
 
     return {
@@ -373,6 +390,7 @@ export class DraftFormComponent implements OnInit, OnChanges {
       contextoGeral: value.contextoGeral,
       objetivo: value.objetivo || undefined,
       criteriosAceite: value.criteriosAceite || undefined,
+      implemented,
       branch: branch || undefined,
       branchPrefix: this.selectedBranchPrefix,
       tasksFromCall: value.tasksFromCall || undefined,

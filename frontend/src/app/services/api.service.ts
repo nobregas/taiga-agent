@@ -31,8 +31,8 @@ export class ApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api';
 
-  health(): Observable<{ status: string }> {
-    return this.http.get<{ status: string }>(`${this.baseUrl}/health`);
+  health(): Observable<{ status: string; version?: string }> {
+    return this.http.get<{ status: string; version?: string }>(`${this.baseUrl}/health`);
   }
 
   getAuthSession(): Observable<AuthSession> {
