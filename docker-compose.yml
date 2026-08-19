@@ -1,17 +1,19 @@
 services:
-  backend:
+  app:
+    image: ghcr.io/nobregas/taiga-agent:latest
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    environment:
-      PORT: ${PORT:-3000}
-      HOST: ${HOST:-0.0.0.0}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4200,http://127.0.0.1:4200}
-      TAIGA_AGENT_DATA_DIR: /data
+      dockerfile: Dockerfile
+    pull_policy: never
+    ports:
+      - "4200:3000"
     volumes:
       - taiga-data:/data
-    ports:
-      - "${PORT:-3000}:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      FRONTEND_DIST: /app/public
+      TAIGA_AGENT_DATA_DIR: /data
     healthcheck:
       test:
         [
@@ -24,17 +26,6 @@ services:
       timeout: 5s
       retries: 8
       start_period: 10s
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    ports:
-      - "4200:80"
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:

@@ -402,12 +402,19 @@ export class TaigaService {
 
   async listProjects(): Promise<TaigaProjectSummary[]> {
     runtimeConfig.assertTaigaCredentials();
-    const projects = await this.request<Array<{ id: number; name: string; slug: string }>>('/projects');
-    return projects.map((project) => ({
-      id: project.id,
-      name: project.name,
-      slug: project.slug,
-    }));
+    const user = await this.getCurrentUser();
+    const projects = await this.request<Array<{ id: number; name: string; slug: string; i_am_member?: boolean }>>(
+      `/projects?member=${user.id}&order_by=memberships__user_order`,
+      { disablePagination: true },
+    );
+
+    return projects
+      .filter((project) => project.i_am_member !== false)
+      .map((project) => ({
+        id: project.id,
+        name: project.name,
+        slug: project.slug,
+      }));
   }
 
   async getProjectMeta(projectId?: number | null): Promise<TaigaProjectMeta> {

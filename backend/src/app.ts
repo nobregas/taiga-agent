@@ -1,5 +1,7 @@
 import cors from 'cors';
 import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config.js';
 import { codebasesRouter } from './routes/codebases.routes.js';
 import { configRouter } from './routes/config.routes.js';
@@ -11,6 +13,32 @@ import { authRouter } from './routes/auth.routes.js';
 import { runtimeConfig } from './services/runtime-config.service.js';
 import { formatErrorMessage } from './utils/error-message.js';
 import { HttpError } from './utils/http-error.js';
+
+function mountFrontend(app: express.Express): void {
+  const indexHtml = path.join(config.frontendDist, 'index.html');
+  if (!fs.existsSync(indexHtml)) {
+    return;
+  }
+
+  app.use(express.static(config.frontendDist, { index: false }));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      next();
+      return;
+    }
+
+    if (req.path.startsWith('/api')) {
+      next();
+      return;
+    }
+
+    res.sendFile(indexHtml, (error) => {
+      if (error) {
+        next(error);
+      }
+    });
+  });
+}
 
 export function createApp() {
   const app = express();
@@ -38,6 +66,8 @@ export function createApp() {
   app.use('/api/config', configRouter);
   app.use('/api/generate', generateRouter);
   app.use('/api/publish', publishRouter);
+
+  mountFrontend(app);
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(error);

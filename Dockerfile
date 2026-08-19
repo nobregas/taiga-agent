@@ -1,4 +1,13 @@
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim AS frontend
+WORKDIR /frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+FROM node:22-bookworm-slim AS backend
 WORKDIR /app
 
 RUN apt-get update \
@@ -19,14 +28,16 @@ RUN npm run build \
 FROM node:22-bookworm-slim
 WORKDIR /app
 
-COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/prompts ./prompts
+COPY --from=backend /app/package.json /app/package-lock.json ./
+COPY --from=backend /app/node_modules ./node_modules
+COPY --from=backend /app/dist ./dist
+COPY --from=backend /app/prompts ./prompts
+COPY --from=frontend /frontend/dist/frontend/browser ./public
 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
+ENV FRONTEND_DIST=/app/public
 ENV TAIGA_AGENT_DATA_DIR=/data
 
 EXPOSE 3000
