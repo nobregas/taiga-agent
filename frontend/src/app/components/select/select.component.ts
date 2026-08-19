@@ -37,6 +37,7 @@ export class SelectComponent implements ControlValueAccessor {
   @Input() placeholder = 'Selecionar';
   @Input() ariaLabel = '';
   @Input() disabled = false;
+  @Input() invalid = false;
   @Input() value: string | number | null = null;
   @Output() valueChange = new EventEmitter<string | number | null>();
 

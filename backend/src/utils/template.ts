@@ -63,12 +63,15 @@ Gere tagPlan com 4 campos (aplicacao, escopo, tipo, dominio).
 Slots:
 ${tagStructure}
 
-BANCO DO PROJETO (prefira estes nomes): ${closedTagBank.join(',')}
-Regras:
-- Prefira copiar exatamente um nome deste banco
-- So crie uma tag NOVA se nenhum nome existente servir razoavelmente
+BANCO DO PROJETO — copie o nome EXATO (caixa e grafia) de um destes: ${closedTagBank.join(',')}
+Regras obrigatorias:
+- Prefira SEMPRE um nome ja existente neste banco
+- Normalize mentalmente: minusculas, sem acento, sem pontuacao, sinonimos e abreviaturas
+- Exemplos: app = aplicativo; front = frontend; api nao e aplicativo; pedidos = pedido
+- NAO crie tag nova se um nome existente ja cobre o conceito (mesmo que a grafia seja diferente)
+- So crie tag nova se NENHUM nome do banco servir, nem por sinonimo/abreviatura
 - Nova tag: nome curto (minusculo, 1-3 tokens, sem pontuacao)
-- Nao traduza tags existentes nem invente sinonimo se o banco ja cobre
+- Nao traduza tags existentes nem invente quase-duplicata (app vs aplicativo)
 - tags = os 4 nomes escolhidos na ordem dos slots
 - Nao envie tagColors; o sistema reutiliza as cores do Taiga`
       : `## Tags estruturadas (obrigatorio)

@@ -5,10 +5,12 @@ import { buildDraftFromUserStory } from '../utils/us.mapper.js';
 import { gitlabService } from '../services/gitlab.service.js';
 import { runtimeConfig } from '../services/runtime-config.service.js';
 import { taigaService } from '../services/taiga.service.js';
+import { HttpError } from '../utils/http-error.js';
+import { toStatusId } from '../utils/task-status.js';
 
 export const configRouter = Router();
 
-configRouter.get('/meta', async (_req, res) => {
+configRouter.get('/meta', async (_req, res, next) => {
   const workspace = runtimeConfig.getActiveWorkspace();
   const settings = runtimeConfig.getSettings();
   const codebases = workspace
@@ -46,6 +48,10 @@ configRouter.get('/meta', async (_req, res) => {
       hasDefaultCodebase: Boolean(defaultCodebase),
     });
   } catch (error) {
+    if (error instanceof HttpError && error.status === 401) {
+      next(error);
+      return;
+    }
     res.json({
       workspaceId: workspace?.id ?? null,
       workspaceName: workspace?.name ?? null,
@@ -193,7 +199,7 @@ configRouter.get('/userstories/:ref/edit', async (req, res, next) => {
           subject: userStory.subject,
           description: userStory.description,
           tags: tagNames,
-          statusId: userStory.status,
+          statusId: toStatusId(userStory.status) ?? userStory.status,
           version: userStory.version,
           url: taigaService.buildUserStoryUrl(userStory.ref, meta.projectSlug),
         },
@@ -202,7 +208,7 @@ configRouter.get('/userstories/:ref/edit', async (req, res, next) => {
           ref: task.ref,
           subject: task.subject,
           description: task.description,
-          statusId: task.status,
+          statusId: toStatusId(task.status) ?? task.status,
           assignedTo: task.assigned_to ?? null,
           version: task.version,
           url: taigaService.buildTaskUrl(task.ref, meta.projectSlug),

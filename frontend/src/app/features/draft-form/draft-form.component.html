@@ -99,9 +99,15 @@
           ></textarea>
         </label>
 
-        <label class="toggle">
+        <label class="implemented-toggle" [class.on]="isImplemented">
           <input type="checkbox" formControlName="implemented" />
-          <span>US já implementada (branch existente)</span>
+          <span class="implemented-toggle__switch" aria-hidden="true">
+            <span class="implemented-toggle__knob"></span>
+          </span>
+          <span class="implemented-toggle__copy">
+            <strong>US ja implementada</strong>
+            <small>Usa uma branch existente no GitLab</small>
+          </span>
         </label>
 
         @if (isImplemented) {

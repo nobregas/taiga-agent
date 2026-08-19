@@ -4,6 +4,7 @@ import { settingsRepository } from '../repositories/settings.repository.js';
 import { workspaceRepository } from '../repositories/workspace.repository.js';
 import { geminiService } from './gemini.service.js';
 import { taigaService } from './taiga.service.js';
+import { HttpError } from '../utils/http-error.js';
 
 export class RuntimeConfigService {
   getSettings() {
@@ -108,7 +109,7 @@ export class RuntimeConfigService {
 
   assertTaigaCredentials(): void {
     if (!this.isTaigaAuthenticated()) {
-      throw new Error('Entre com sua conta Taiga para continuar');
+      throw new HttpError('Entre com sua conta Taiga para continuar', 401);
     }
   }
 
@@ -139,6 +140,11 @@ export class RuntimeConfigService {
   invalidateAuth(): void {
     taigaService.invalidateAuth();
     geminiService.invalidateClient();
+  }
+
+  clearExpiredTaigaSession(): void {
+    this.invalidateAuth();
+    settingsRepository.update({ taigaToken: '', taigaPassword: '' });
   }
 }
 

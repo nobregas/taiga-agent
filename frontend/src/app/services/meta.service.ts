@@ -46,6 +46,11 @@ export class MetaService {
     });
   }
 
+  clear(): void {
+    this.metaSubject.next(null);
+    this.workspacesSubject.next([]);
+  }
+
   afterWorkspaceChange(activateId?: number | null): Observable<ProjectMeta> {
     const syncWorkspaces$ = activateId
       ? this.api.activateWorkspace(activateId).pipe(switchMap(() => this.loadWorkspaces()))

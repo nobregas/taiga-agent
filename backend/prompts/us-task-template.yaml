@@ -29,7 +29,10 @@ tags:
   rules: |
     Gere tagPlan com exatamente 4 valores (aplicacao, escopo, tipo, dominio).
     Prefira tags ja cadastradas no projeto Taiga (lista compacta no prompt).
-    Crie uma tag nova somente se nenhum nome existente servir razoavelmente.
+    Copie o nome EXATO da tag existente (caixa/grafia).
+    Normalize sinonimos e abreviaturas antes de criar (app = aplicativo, front = frontend).
+    Nao crie tag nova se um nome existente ja cobre o conceito.
+    Nao invente quase-duplicatas.
 task:
   language: obliqua
   domain_examples: [Pedido, Checkout, Pagamento, Carrinho]

@@ -38,6 +38,15 @@
   cursor: not-allowed;
 }
 
+.app-select.invalid .app-select__trigger {
+  border-color: #b91c1c;
+}
+
+.app-select.invalid .app-select__trigger:focus {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.12);
+}
+
 .app-select__label {
   min-width: 0;
   overflow: hidden;

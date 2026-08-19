@@ -14,12 +14,16 @@ import {
   TagCategory,
   areAllTasksComplete,
   colorFromProject,
+  defaultOpenStatusId,
   ensureDefaultFinalTasks,
   findExistingTag,
   flattenTagPlan,
   formatAcceptanceCriteria,
+  fuzzyMatchTag,
   isMergeTask,
   resolveUserStoryStatusId,
+  sameStatusId,
+  sprintRequiredError,
   tagColorFor,
   toValidUserId,
 } from '../../models/draft.models';
@@ -51,6 +55,7 @@ export class ReviewPanelComponent {
   tagCategories = TAG_CATEGORIES;
   tagCategoryLabels = TAG_CATEGORY_LABELS;
   tagColorOverrides: Record<string, string> = {};
+  readonly sameStatusId = sameStatusId;
   private sourceDraft: Draft | null = null;
   private readonly optionalTagCategories: readonly TagCategory[] = OPTIONAL_TAG_CATEGORIES;
 
@@ -81,7 +86,7 @@ export class ReviewPanelComponent {
       // mirrors the conditional validator in draft-form.component.ts.
       branch: [value.branch, this.isBranchRequired ? Validators.required : []],
       usStatusId: [defaultUsStatus ?? 0],
-      milestoneId: [defaultSprintId],
+      milestoneId: [defaultSprintId, Validators.required],
       gitNotes: [value.gitNotes ?? ''],
       tagPlan: this.fb.nonNullable.group({
         aplicacao: [value.tagPlan.aplicacao, Validators.required],
@@ -95,6 +100,7 @@ export class ReviewPanelComponent {
           createTaskFormGroup(this.fb, task, {
             defaultAssigneeId: this.defaultAssigneeId,
             mergeAssigneeId: this.mergeAssigneeId,
+            defaultTaskStatus: defaultOpenStatusId(this.taskStatuses),
           }),
         ),
       ),
@@ -125,10 +131,14 @@ export class ReviewPanelComponent {
   }
 
   get sprintOptions() {
-    return [
-      { value: null, label: 'Sem sprint' },
-      ...this.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
-    ];
+    if (!this.sprints.length) {
+      return [];
+    }
+    return this.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }));
+  }
+
+  get sprintError(): string | null {
+    return sprintRequiredError(this.form?.get('milestoneId')?.value, this.sprints);
   }
 
   get gitlabEnrichment() {
@@ -196,7 +206,7 @@ export class ReviewPanelComponent {
 
   onTagNameChange(category: TagCategory): void {
     const raw = String(this.form.get('tagPlan')?.get(category)?.value ?? '').trim();
-    const existingName = findExistingTag(raw, this.existingProjectTags);
+    const existingName = fuzzyMatchTag(raw, this.existingProjectTags) ?? findExistingTag(raw, this.existingProjectTags);
     if (existingName && existingName !== raw) {
       this.form.get('tagPlan')?.get(category)?.setValue(existingName, { emitEvent: false });
     }

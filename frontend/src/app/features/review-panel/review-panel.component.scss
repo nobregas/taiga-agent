@@ -189,6 +189,15 @@ textarea:focus {
   max-width: 18rem;
 }
 
+.field-error {
+  color: #b91c1c;
+  font-size: 0.6875rem;
+}
+
+.field--invalid app-select {
+  display: block;
+}
+
 
 .descricao-us {
   font-family: inherit;
@@ -218,6 +227,10 @@ textarea:focus {
   cursor: pointer;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+.status-btn:hover:not(.active) {
+  background: var(--surface-muted);
 }
 
 .status-btn.sm {

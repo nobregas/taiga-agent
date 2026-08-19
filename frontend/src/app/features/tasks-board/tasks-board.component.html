@@ -23,12 +23,12 @@
     </div>
 
     <div class="tasks-list">
-      @for (task of tasks.controls; track $index) {
+      @for (task of tasks.controls; track $index; let taskIndex = $index) {
         <div
           class="task-card"
           [formGroup]="asGroup(task)"
-          [class.task-card--gitlab-done]="isTaskBranchComplete($index)"
-          [class.task-card--gitlab-pending]="isTaskGitlabInformed($index) && !isTaskBranchComplete($index)"
+          [class.task-card--gitlab-done]="isTaskBranchComplete(taskIndex)"
+          [class.task-card--gitlab-pending]="isTaskGitlabInformed(taskIndex) && !isTaskBranchComplete(taskIndex)"
         >
           <div class="task-head">
             <div class="task-head__title">
@@ -41,10 +41,10 @@
                   Task {{ $index + 1 }}
                 }
               </strong>
-              @if (isTaskGitlabInformed($index)) {
+              @if (isTaskGitlabInformed(taskIndex)) {
                 <div class="task-badges">
                   <span class="badge badge--gitlab">Da branch</span>
-                  @if (isTaskBranchComplete($index)) {
+                  @if (isTaskBranchComplete(taskIndex)) {
                     <span class="badge badge--done">Concluida na branch</span>
                   } @else {
                     <span class="badge badge--pending">Pendente na branch</span>
@@ -52,19 +52,19 @@
                 </div>
               }
             </div>
-            @if (canRemove($index)) {
-              <button type="button" class="btn danger sm" (click)="removeTask($index)">Remover</button>
+            @if (canRemove(taskIndex)) {
+              <button type="button" class="btn danger sm" (click)="removeTask(taskIndex)">Remover</button>
             }
           </div>
           <input
             formControlName="subject"
             placeholder="[Checkout] Adicionar QRcode ao pagamento"
-            (blur)="onTaskSubjectChange($index)"
+            (blur)="onTaskSubjectChange(taskIndex)"
           />
           <textarea formControlName="description" rows="2" placeholder="Detalhes opcionais"></textarea>
-          @if (taskInferredFrom($index).length) {
+          @if (taskInferredFrom(taskIndex).length) {
             <small class="hint task-evidence">
-              Evidencias: {{ taskInferredFrom($index).join(' · ') }}
+              Evidencias: {{ taskInferredFrom(taskIndex).join(' · ') }}
             </small>
           }
           <div class="task-meta-row">
@@ -75,33 +75,23 @@
                 [options]="assigneeOptions"
                 placeholder="Sem responsavel"
                 ariaLabel="Responsavel da task"
-                (valueChange)="onAssigneeChange($index, $event)"
+                (valueChange)="onAssigneeChange(taskIndex, $event)"
               />
-              @if (isMergeAssigneeLocked($index)) {
+              @if (isMergeAssigneeLocked(taskIndex)) {
                 <small class="hint">Definido pelo workspace para tasks de Merge</small>
               }
             </label>
             <div class="field">
               <span>Status</span>
               <div class="status-buttons">
-                @for (status of openTaskStatusesList; track status.id) {
+                @for (status of taskStatuses; track status.id) {
                   <button
                     type="button"
                     class="status-btn sm"
-                    [class.active]="task.get('statusId')?.value === status.id"
-                    (click)="setTaskStatus($index, status.id)"
+                    [class.active]="isStatusSelected(taskIndex, status.id)"
+                    (click)="setTaskStatus(taskIndex, status.id)"
                   >
                     {{ status.name }}
-                  </button>
-                }
-                @if (doneStatusId) {
-                  <button
-                    type="button"
-                    class="status-btn sm done-toggle"
-                    [class.active]="isTaskDone($index)"
-                    (click)="toggleTaskDone($index)"
-                  >
-                    Done
                   </button>
                 }
               </div>

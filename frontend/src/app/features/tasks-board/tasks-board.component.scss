@@ -130,6 +130,10 @@ textarea:focus {
   font-weight: 500;
 }
 
+.status-btn:hover:not(.active) {
+  background: var(--surface-muted);
+}
+
 .status-btn.sm {
   padding: 0.28rem 0.55rem;
   font-size: 0.6875rem;

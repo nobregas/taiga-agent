@@ -14,13 +14,17 @@ import {
   TagCategory,
   areAllTasksComplete,
   colorFromProject,
+  defaultOpenStatusId,
   ensureDefaultFinalTasks,
   findExistingTag,
   flattenTagPlan,
   formatAcceptanceCriteria,
+  fuzzyMatchTag,
   isMergeTask,
   parseUsDescription,
   resolveUserStoryStatusId,
+  sameStatusId,
+  sprintRequiredError,
   tagColorFor,
   toValidUserId,
 } from '../../models/draft.models';
@@ -51,6 +55,7 @@ export class PublishedPanelComponent implements OnChanges {
   tagCategories = TAG_CATEGORIES;
   tagCategoryLabels = TAG_CATEGORY_LABELS;
   tagColorOverrides: Record<string, string> = {};
+  readonly sameStatusId = sameStatusId;
   private readonly optionalTagCategories: readonly TagCategory[] = OPTIONAL_TAG_CATEGORIES;
 
   constructor(private readonly fb: FormBuilder) {}
@@ -83,10 +88,14 @@ export class PublishedPanelComponent implements OnChanges {
   }
 
   get sprintOptions() {
-    return [
-      { value: null, label: 'Sem sprint' },
-      ...this.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name })),
-    ];
+    if (!this.sprints.length) {
+      return [];
+    }
+    return this.sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }));
+  }
+
+  get sprintError(): string | null {
+    return sprintRequiredError(this.form?.get('milestoneId')?.value, this.sprints);
   }
 
   get existingProjectTags(): string[] {
@@ -146,7 +155,7 @@ export class PublishedPanelComponent implements OnChanges {
       // created without an implementation shouldn't suddenly require a branch to save.
       branch: [parsed.branch || draft.branch, draft.implemented === false ? [] : Validators.required],
       usStatusId: [defaultUsStatus ?? 0, Validators.required],
-      milestoneId: [defaultSprintId],
+      milestoneId: [defaultSprintId, Validators.required],
       tagPlan: this.fb.nonNullable.group({
         aplicacao: [draft.tagPlan.aplicacao, Validators.required],
         escopo: [draft.tagPlan.escopo, Validators.required],
@@ -160,6 +169,7 @@ export class PublishedPanelComponent implements OnChanges {
             defaultAssigneeId: this.defaultAssigneeId,
             mergeAssigneeId: this.mergeAssigneeId,
             published: true,
+            defaultTaskStatus: defaultOpenStatusId(this.taskStatuses),
           }),
         ),
       ),
@@ -189,7 +199,7 @@ export class PublishedPanelComponent implements OnChanges {
 
   onTagNameChange(category: TagCategory): void {
     const raw = String(this.form.get('tagPlan')?.get(category)?.value ?? '').trim();
-    const existingName = findExistingTag(raw, this.existingProjectTags);
+    const existingName = fuzzyMatchTag(raw, this.existingProjectTags) ?? findExistingTag(raw, this.existingProjectTags);
     if (existingName && existingName !== raw) {
       this.form.get('tagPlan')?.get(category)?.setValue(existingName, { emitEvent: false });
     }

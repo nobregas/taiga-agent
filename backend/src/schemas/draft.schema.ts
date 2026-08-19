@@ -138,26 +138,46 @@ export const generateRequestSchema = z
     }
   });
 
-export const publishRequestSchema = z.object({
-  mode: z.enum(['new_us', 'existing_us']),
-  draft: draftSchema,
-});
+export const publishRequestSchema = z
+  .object({
+    mode: z.enum(['new_us', 'existing_us']),
+    draft: draftSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (data.draft.milestoneId == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Selecione uma sprint',
+        path: ['draft', 'milestoneId'],
+      });
+    }
+  });
 
-export const updatePublishedSchema = z.object({
-  userStoryId: z.number(),
-  userStoryVersion: z.number().optional(),
-  draft: draftSchema,
-  tasks: z.array(
-    z.object({
-      id: z.number().optional(),
-      version: z.number().optional(),
-      subject: z.string(),
-      description: z.string().optional(),
-      statusId: z.number(),
-      assignedTo: z.number().nullable().optional(),
-    }),
-  ),
-});
+export const updatePublishedSchema = z
+  .object({
+    userStoryId: z.number(),
+    userStoryVersion: z.number().optional(),
+    draft: draftSchema,
+    tasks: z.array(
+      z.object({
+        id: z.number().optional(),
+        version: z.number().optional(),
+        subject: z.string(),
+        description: z.string().optional(),
+        statusId: z.number(),
+        assignedTo: z.number().nullable().optional(),
+      }),
+    ),
+  })
+  .superRefine((data, ctx) => {
+    if (data.draft.milestoneId == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Selecione uma sprint',
+        path: ['draft', 'milestoneId'],
+      });
+    }
+  });
 
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 export type PublishRequest = z.infer<typeof publishRequestSchema>;

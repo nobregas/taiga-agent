@@ -147,7 +147,7 @@ Tasks sem relacao com a branch devem ter gitlabInformed=false e branchComplete=f
 
     if (meta.tags.length) {
       parts.push(
-        'Prefira tags do banco compacto do system prompt. Crie tag nova SOMENTE se nenhum nome existente servir.',
+        'Prefira tags do banco compacto do system prompt. Copie o nome EXATO da tag existente. Nao crie "app" se ja existir "aplicativo" (ou sinonimo/abreviatura). Crie tag nova SOMENTE se nenhum nome existente cobrir o conceito.',
       );
     } else {
       parts.push('Projeto sem tags cadastradas — crie tagPlan com nomes curtos.');

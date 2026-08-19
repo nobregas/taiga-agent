@@ -27,10 +27,41 @@ export const TAG_CATEGORY_LABELS: Record<keyof StructuredTagPlan, string> = {
   dominio: 'Dominio',
 };
 
+const TAG_SYNONYM_GROUPS: string[][] = [
+  ['app', 'aplicativo', 'aplicativos', 'aplicacao', 'aplicacoes', 'application', 'applications'],
+  ['api', 'apis', 'endpoint', 'endpoints'],
+  ['front', 'frontend', 'ui', 'web'],
+  ['back', 'backend', 'server'],
+  ['fullstack'],
+  ['feature', 'feat', 'funcionalidade', 'funcionalidades'],
+  ['fix', 'bugfix', 'hotfix', 'correcao'],
+  ['teste', 'test', 'tests', 'testing', 'qa'],
+  ['docs', 'doc', 'documentacao', 'documentation'],
+  ['refactor', 'refatoracao'],
+  ['chore', 'manutencao'],
+  ['dashboard', 'painel', 'admin'],
+  ['portal', 'portais'],
+  ['mobile', 'android', 'ios'],
+  ['pedido', 'pedidos', 'order', 'orders'],
+  ['checkout'],
+  ['pagamento', 'pagamentos', 'payment', 'payments'],
+  ['carrinho', 'cart'],
+  ['catalogo', 'catalog', 'catalogue'],
+  ['usuario', 'user', 'users', 'usuarios'],
+];
+
+const SYNONYM_GROUP_BY_KEY = (() => {
+  const map = new Map<string, number>();
+  TAG_SYNONYM_GROUPS.forEach((group, index) => {
+    for (const alias of group) {
+      map.set(compactTagKey(alias), index);
+    }
+  });
+  return map;
+})();
+
 export function flattenTagPlan(plan: StructuredTagPlan): string[] {
-  return [plan.aplicacao, plan.escopo, plan.tipo, plan.dominio]
-    .map((tag) => tag.trim().toLowerCase())
-    .filter(Boolean);
+  return [plan.aplicacao, plan.escopo, plan.tipo, plan.dominio].map((tag) => tag.trim()).filter(Boolean);
 }
 
 export function tagPlanToTaigaTags(
@@ -39,14 +70,17 @@ export function tagPlanToTaigaTags(
 ): TagWithColor[] {
   return (Object.keys(plan) as Array<keyof StructuredTagPlan>)
     .map((category) => {
-      const name = plan[category].trim().toLowerCase();
+      const name = plan[category].trim();
       return {
         category,
         name,
-        color: customColors?.[name] ?? customColors?.[plan[category]] ?? TAG_CATEGORY_COLORS[category],
+        color:
+          customColors?.[name] ??
+          customColors?.[name.toLowerCase()] ??
+          customColors?.[plan[category]] ??
+          TAG_CATEGORY_COLORS[category],
       };
     })
-    // Optional categories (currently only `dominio`) may be blank; never forward an empty tag to Taiga.
     .filter((tag) => tag.name.length > 0);
 }
 
@@ -68,17 +102,44 @@ export function normalizeHexColor(color: string | null | undefined): string | nu
   return value;
 }
 
-export function findExistingTag(name: string, existingTags: string[]): string | undefined {
-  const normalized = name.trim().toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-
-  return existingTags.find((tag) => tag.toLowerCase() === normalized);
+export function normalizeTagKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' e ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
-export function compactTagBank(existingTags: string[]): string {
-  return existingTags.map((tag) => tag.trim()).filter(Boolean).join(',');
+function compactTagKey(value: string): string {
+  return normalizeTagKey(value).replace(/\s+/g, '');
+}
+
+function singularize(key: string): string {
+  if (key.endsWith('oes') && key.length > 5) {
+    return `${key.slice(0, -3)}ao`;
+  }
+  if (key.endsWith('s') && !key.endsWith('ss') && key.length > 4) {
+    return key.slice(0, -1);
+  }
+  return key;
+}
+
+function commonPrefixLength(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let index = 0;
+  while (index < max && a[index] === b[index]) {
+    index += 1;
+  }
+  return index;
+}
+
+function sameSynonymGroup(a: string, b: string): boolean {
+  const left = SYNONYM_GROUP_BY_KEY.get(a);
+  const right = SYNONYM_GROUP_BY_KEY.get(b);
+  return left != null && right != null && left === right;
 }
 
 function levenshtein(a: string, b: string): number {
@@ -102,42 +163,94 @@ function levenshtein(a: string, b: string): number {
   return row[b.length];
 }
 
+function scoreTagMatch(query: string, tag: string): number {
+  const queryNormalized = normalizeTagKey(query);
+  const tagNormalized = normalizeTagKey(tag);
+  if (!queryNormalized || !tagNormalized) {
+    return 0;
+  }
+  if (queryNormalized === tagNormalized) {
+    return 100;
+  }
+
+  const queryCompact = compactTagKey(query);
+  const tagCompact = compactTagKey(tag);
+  if (queryCompact === tagCompact) {
+    return 95;
+  }
+
+  const querySingular = singularize(queryCompact);
+  const tagSingular = singularize(tagCompact);
+  if (querySingular === tagSingular) {
+    return 92;
+  }
+
+  if (
+    sameSynonymGroup(queryCompact, tagCompact) ||
+    sameSynonymGroup(querySingular, tagSingular) ||
+    sameSynonymGroup(queryNormalized.replace(/\s+/g, ''), tagNormalized.replace(/\s+/g, ''))
+  ) {
+    return 90;
+  }
+
+  const prefix = commonPrefixLength(querySingular, tagSingular);
+  const shorter = Math.min(querySingular.length, tagSingular.length);
+  if (prefix >= 5 || (prefix >= 4 && shorter > 0 && prefix / shorter >= 0.7)) {
+    return 70 + Math.min(20, prefix);
+  }
+
+  const maxLen = Math.max(querySingular.length, tagSingular.length);
+  if (shorter >= 5 && maxLen >= 5) {
+    const distance = levenshtein(querySingular, tagSingular);
+    if (distance === 1 && distance / maxLen <= 0.25) {
+      return 60;
+    }
+    if (distance === 2 && maxLen >= 7 && distance / maxLen <= 0.3) {
+      return 50;
+    }
+  }
+
+  return 0;
+}
+
+export function findExistingTag(name: string, existingTags: string[]): string | undefined {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  return existingTags.find((tag) => tag.toLowerCase() === normalized);
+}
+
+export function compactTagBank(existingTags: string[]): string {
+  return existingTags.map((tag) => tag.trim()).filter(Boolean).join(',');
+}
+
 export function fuzzyMatchTag(name: string, existingTags: string[]): string | undefined {
   const exact = findExistingTag(name, existingTags);
   if (exact) {
     return exact;
   }
 
-  const normalized = name.trim().toLowerCase();
-  if (!normalized || !existingTags.length) {
+  if (!name.trim() || !existingTags.length) {
     return undefined;
   }
 
-  const startsWith = existingTags.find((tag) => {
-    const value = tag.toLowerCase();
-    return value.startsWith(normalized) || normalized.startsWith(value);
-  });
-  if (startsWith) {
-    return startsWith;
-  }
-
-  const contained = existingTags.find((tag) => {
-    const value = tag.toLowerCase();
-    return value.includes(normalized) || normalized.includes(value);
-  });
-  if (contained && Math.abs(contained.length - normalized.length) <= 4) {
-    return contained;
-  }
-
   let best: string | undefined;
-  let bestDistance = Infinity;
+  let bestScore = 0;
+  let bestDelta = Infinity;
 
   for (const tag of existingTags) {
-    const distance = levenshtein(normalized, tag.toLowerCase());
-    const maxLen = Math.max(normalized.length, tag.length);
-    if (distance < bestDistance && distance <= 2 && distance / maxLen <= 0.45) {
-      bestDistance = distance;
+    const score = scoreTagMatch(name, tag);
+    if (score < 60) {
+      continue;
+    }
+
+    const delta = Math.abs(compactTagKey(tag).length - compactTagKey(name).length);
+    if (score > bestScore || (score === bestScore && delta < bestDelta)) {
       best = tag;
+      bestScore = score;
+      bestDelta = delta;
     }
   }
 
@@ -146,32 +259,39 @@ export function fuzzyMatchTag(name: string, existingTags: string[]): string | un
 
 export function constrainToExistingTag(name: string, existingTags: string[], fallback?: string): string {
   if (!existingTags.length) {
-    return name.trim().toLowerCase();
+    return name.trim();
   }
 
   return (
     fuzzyMatchTag(name, existingTags) ??
     (fallback ? fuzzyMatchTag(fallback, existingTags) : undefined) ??
-    existingTags[0]
+    name.trim()
   );
 }
 
 export function resolveTagName(name: string, existingTags: string[], fallback?: string): string {
-  const normalized = name.trim().toLowerCase();
-  if (!normalized) {
+  const trimmed = name.trim();
+  if (!trimmed) {
     return fallback ? resolveTagName(fallback, existingTags) : (existingTags[0] ?? 'geral');
   }
 
-  const existing = fuzzyMatchTag(normalized, existingTags);
+  const existing = fuzzyMatchTag(trimmed, existingTags);
   if (existing) {
     return existing;
   }
 
-  if (!existingTags.length || isReasonableNewTagName(normalized)) {
-    return normalized.replace(/\s+/g, '-');
+  if (fallback) {
+    const fallbackMatch = fuzzyMatchTag(fallback, existingTags);
+    if (fallbackMatch && scoreTagMatch(trimmed, fallback) >= 90) {
+      return fallbackMatch;
+    }
   }
 
-  return constrainToExistingTag(normalized, existingTags, fallback);
+  if (!existingTags.length || isReasonableNewTagName(normalizeTagKey(trimmed))) {
+    return normalizeTagKey(trimmed).replace(/\s+/g, '-');
+  }
+
+  return constrainToExistingTag(trimmed, existingTags, fallback);
 }
 
 export function resolveTagPlanAllowingNew(
@@ -182,7 +302,7 @@ export function resolveTagPlanAllowingNew(
     aplicacao: resolveTagName(plan.aplicacao, existingTags, 'app'),
     escopo: resolveTagName(plan.escopo, existingTags, 'front'),
     tipo: resolveTagName(plan.tipo, existingTags, 'feature'),
-    dominio: resolveTagName(plan.dominio, existingTags, 'geral'),
+    dominio: plan.dominio.trim() ? resolveTagName(plan.dominio, existingTags, 'geral') : '',
   };
 }
 
@@ -201,7 +321,7 @@ export function preferExistingTagNames(
   plan: StructuredTagPlan,
   existingTags: string[],
 ): StructuredTagPlan {
-  const pick = (value: string) => findExistingTag(value, existingTags) ?? value.trim().toLowerCase();
+  const pick = (value: string) => fuzzyMatchTag(value, existingTags) ?? value.trim();
 
   return {
     aplicacao: pick(plan.aplicacao),
@@ -219,15 +339,15 @@ export function mergeTagColors(
   const result: Record<string, string> = {};
 
   for (const category of Object.keys(plan) as Array<keyof StructuredTagPlan>) {
-    const name = plan[category].trim().toLowerCase();
+    const name = plan[category].trim();
     if (!name) {
       continue;
     }
 
     const existingEntry = Object.entries(existingTagColors).find(
-      ([tag]) => tag.toLowerCase() === name,
+      ([tag]) => tag.toLowerCase() === name.toLowerCase(),
     );
-    const generatedColor = generated?.[name] ?? generated?.[plan[category]];
+    const generatedColor = generated?.[name] ?? generated?.[name.toLowerCase()] ?? generated?.[plan[category]];
     result[name] =
       normalizeHexColor(existingEntry?.[1]) ??
       normalizeHexColor(generatedColor) ??
@@ -242,15 +362,18 @@ export function mergeTagPlanIntoExisting(
   existingTags: string[],
 ): StructuredTagPlan {
   const pick = (value: string, fallback: string) => {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) return fallback;
-    return findExistingTag(value, existingTags) ?? normalized;
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    return fuzzyMatchTag(trimmed, existingTags) ?? trimmed;
   };
 
   return {
-    aplicacao: pick(plan.aplicacao, findExistingTag('app', existingTags) ?? findExistingTag('dashboard', existingTags) ?? 'app'),
-    escopo: pick(plan.escopo, findExistingTag('front', existingTags) ?? findExistingTag('back', existingTags) ?? 'front'),
-    tipo: pick(plan.tipo, findExistingTag('feature', existingTags) ?? 'feature'),
+    aplicacao: pick(
+      plan.aplicacao,
+      fuzzyMatchTag('app', existingTags) ?? fuzzyMatchTag('dashboard', existingTags) ?? 'app',
+    ),
+    escopo: pick(plan.escopo, fuzzyMatchTag('front', existingTags) ?? fuzzyMatchTag('back', existingTags) ?? 'front'),
+    tipo: pick(plan.tipo, fuzzyMatchTag('feature', existingTags) ?? 'feature'),
     dominio: pick(plan.dominio, plan.dominio || 'geral'),
   };
 }

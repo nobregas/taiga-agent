@@ -182,6 +182,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error: (err) => {
+        if (err?.status === 401) {
+          this.loading = false;
+          return;
+        }
         this.toast.show(err?.error?.error ?? 'Falha ao carregar US do Taiga.');
         this.loading = false;
       },
@@ -199,7 +203,9 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.step = 'done';
       },
       error: (err) => {
-        this.toast.show(err?.error?.error ?? 'Falha ao publicar no Taiga.');
+        if (err?.status !== 401) {
+          this.toast.show(err?.error?.error ?? 'Falha ao publicar no Taiga.');
+        }
         this.publishing = false;
       },
     });
@@ -231,7 +237,9 @@ export class HomeComponent implements OnInit, OnDestroy {
           this.toast.show('Alteracoes salvas no Taiga.', 'info');
         },
         error: (err) => {
-          this.toast.show(err?.error?.error ?? 'Falha ao salvar alteracoes.');
+          if (err?.status !== 401) {
+            this.toast.show(err?.error?.error ?? 'Falha ao salvar alteracoes.');
+          }
           this.savingPublished = false;
         },
       });
@@ -281,6 +289,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.clearGenerateTimers();
+        if (err?.status === 401) {
+          this.closeGenerateModal();
+          this.loading = false;
+          return;
+        }
         this.generateError = err?.error?.error ?? 'Falha ao gerar draft com IA.';
         this.loading = false;
       },

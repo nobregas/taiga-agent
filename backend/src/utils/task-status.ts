@@ -99,12 +99,29 @@ export function isDoneStatus(statusId: number | undefined, statuses: TaigaStatus
     return false;
   }
 
-  const status = statuses.find((item) => item.id === statusId);
+  const status = statuses.find((item) => Number(item.id) === Number(statusId));
   if (!status) {
     return false;
   }
 
   return status.is_closed || statusMatches(status, DONE_ALIASES);
+}
+
+export function toStatusId(value: unknown): number | undefined {
+  if (value == null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'object' && value && 'id' in value) {
+    return toStatusId((value as { id?: unknown }).id);
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return Math.trunc(parsed);
 }
 
 export function areAllTasksComplete(

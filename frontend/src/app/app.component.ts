@@ -86,8 +86,6 @@ export class AppComponent implements OnInit {
     this.userMenuOpen = false;
     this.auth.logout().subscribe({
       next: () => {
-        this.meta = null;
-        this.workspaces = [];
         this.router.navigateByUrl('/login');
       },
       error: () => {
@@ -145,12 +143,18 @@ export class AppComponent implements OnInit {
     this.avatarBroken = false;
     this.metaService.load().subscribe({
       error: (err) => {
+        if (err?.status === 401) {
+          return;
+        }
         this.toast.show(err?.error?.error ?? 'Falha ao carregar metadados do Taiga. Verifique se o backend esta em http://localhost:3000.');
       },
     });
 
     this.metaService.loadWorkspaces().subscribe({
       error: (err) => {
+        if (err?.status === 401) {
+          return;
+        }
         this.toast.show(err?.error?.error ?? 'Nao foi possivel falar com o backend. Suba com npm run dev (backend + frontend).');
       },
     });

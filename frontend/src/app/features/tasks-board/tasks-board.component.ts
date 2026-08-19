@@ -15,6 +15,8 @@ import {
   isSubirPrTask,
   memberDisplayName,
   openTaskStatuses,
+  sameStatusId,
+  toStatusId,
   toValidUserId,
 } from '../../models/draft.models';
 
@@ -133,8 +135,12 @@ export class TasksBoardComponent {
   }
 
   isTaskDone(index: number): boolean {
-    const statusId = this.tasks.at(index).get('statusId')?.value as number;
+    const statusId = this.tasks.at(index).get('statusId')?.value;
     return isDoneStatus(statusId, this.taskStatuses);
+  }
+
+  isStatusSelected(index: number, statusId: number): boolean {
+    return sameStatusId(this.tasks.at(index).get('statusId')?.value, statusId);
   }
 
   isMergeTaskAt(index: number): boolean {
@@ -158,7 +164,11 @@ export class TasksBoardComponent {
   }
 
   setTaskStatus(index: number, statusId: number): void {
-    this.tasks.at(index).patchValue({ statusId });
+    const resolved = toStatusId(statusId);
+    if (resolved == null) {
+      return;
+    }
+    this.tasks.at(index).patchValue({ statusId: resolved });
     this.tasksChanged.emit();
   }
 
@@ -426,7 +436,7 @@ export function createTaskFormGroup(
     url: [task.url ?? ''],
     subject: [task.subject, Validators.required],
     description: [task.description ?? ''],
-    statusId: [task.statusId ?? options.defaultTaskStatus ?? 0],
+    statusId: [toStatusId(task.statusId) ?? toStatusId(options.defaultTaskStatus) ?? 0],
     assignedTo: assignedToControl,
     gitlabInformed: [task.gitlabInformed ?? false],
     branchComplete: [task.branchComplete ?? false],

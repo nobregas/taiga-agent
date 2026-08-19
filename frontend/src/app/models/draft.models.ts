@@ -264,10 +264,142 @@ export function toValidUserId(value: unknown): number | null {
   return Math.trunc(parsed);
 }
 
+export function toStatusId(value: unknown): number | undefined {
+  if (value == null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'object' && value && 'id' in value) {
+    return toStatusId((value as { id?: unknown }).id);
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return Math.trunc(parsed);
+}
+
+export function sameStatusId(a: unknown, b: unknown): boolean {
+  const left = toStatusId(a);
+  const right = toStatusId(b);
+  return left != null && right != null && left === right;
+}
+
+export function sprintRequiredError(
+  milestoneId: number | null | undefined,
+  sprints: Array<{ id: number }>,
+): string | null {
+  if (!sprints.length) {
+    return 'Nenhuma sprint disponivel neste projeto. Crie uma sprint no Taiga.';
+  }
+  if (milestoneId == null) {
+    return 'Selecione uma sprint.';
+  }
+  return null;
+}
+
 export function flattenTagPlan(plan: StructuredTagPlan): string[] {
-  return [plan.aplicacao, plan.escopo, plan.tipo, plan.dominio]
-    .map((tag) => tag.trim().toLowerCase())
-    .filter(Boolean);
+  return [plan.aplicacao, plan.escopo, plan.tipo, plan.dominio].map((tag) => tag.trim()).filter(Boolean);
+}
+
+const TAG_SYNONYM_GROUPS: string[][] = [
+  ['app', 'aplicativo', 'aplicativos', 'aplicacao', 'aplicacoes', 'application', 'applications'],
+  ['api', 'apis', 'endpoint', 'endpoints'],
+  ['front', 'frontend', 'ui', 'web'],
+  ['back', 'backend', 'server'],
+  ['feature', 'feat', 'funcionalidade', 'funcionalidades'],
+  ['fix', 'bugfix', 'hotfix', 'correcao'],
+  ['teste', 'test', 'tests', 'testing', 'qa'],
+  ['docs', 'doc', 'documentacao', 'documentation'],
+  ['pedido', 'pedidos', 'order', 'orders'],
+  ['pagamento', 'pagamentos', 'payment', 'payments'],
+  ['usuario', 'user', 'users', 'usuarios'],
+];
+
+function normalizeTagKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function compactTagKey(value: string): string {
+  return normalizeTagKey(value).replace(/\s+/g, '');
+}
+
+function singularizeTagKey(key: string): string {
+  if (key.endsWith('oes') && key.length > 5) {
+    return `${key.slice(0, -3)}ao`;
+  }
+  if (key.endsWith('s') && !key.endsWith('ss') && key.length > 4) {
+    return key.slice(0, -1);
+  }
+  return key;
+}
+
+const TAG_SYNONYM_INDEX = (() => {
+  const map = new Map<string, number>();
+  TAG_SYNONYM_GROUPS.forEach((group, index) => {
+    for (const alias of group) {
+      map.set(compactTagKey(alias), index);
+    }
+  });
+  return map;
+})();
+
+function sameTagSynonymGroup(a: string, b: string): boolean {
+  const left = TAG_SYNONYM_INDEX.get(a);
+  const right = TAG_SYNONYM_INDEX.get(b);
+  return left != null && right != null && left === right;
+}
+
+function commonPrefixLength(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let index = 0;
+  while (index < max && a[index] === b[index]) {
+    index += 1;
+  }
+  return index;
+}
+
+function scoreTagMatch(query: string, tag: string): number {
+  const queryNormalized = normalizeTagKey(query);
+  const tagNormalized = normalizeTagKey(tag);
+  if (!queryNormalized || !tagNormalized) {
+    return 0;
+  }
+  if (queryNormalized === tagNormalized) {
+    return 100;
+  }
+
+  const queryCompact = compactTagKey(query);
+  const tagCompact = compactTagKey(tag);
+  if (queryCompact === tagCompact) {
+    return 95;
+  }
+
+  const querySingular = singularizeTagKey(queryCompact);
+  const tagSingular = singularizeTagKey(tagCompact);
+  if (querySingular === tagSingular) {
+    return 92;
+  }
+
+  if (sameTagSynonymGroup(queryCompact, tagCompact) || sameTagSynonymGroup(querySingular, tagSingular)) {
+    return 90;
+  }
+
+  const prefix = commonPrefixLength(querySingular, tagSingular);
+  const shorter = Math.min(querySingular.length, tagSingular.length);
+  if (prefix >= 5 || (prefix >= 4 && shorter > 0 && prefix / shorter >= 0.7)) {
+    return 70 + Math.min(20, prefix);
+  }
+
+  return 0;
 }
 
 export function findExistingTag(name: string, tags: string[]): string | undefined {
@@ -276,6 +408,37 @@ export function findExistingTag(name: string, tags: string[]): string | undefine
     return undefined;
   }
   return tags.find((tag) => tag.toLowerCase() === normalized);
+}
+
+export function fuzzyMatchTag(name: string, tags: string[]): string | undefined {
+  const exact = findExistingTag(name, tags);
+  if (exact) {
+    return exact;
+  }
+
+  if (!name.trim() || !tags.length) {
+    return undefined;
+  }
+
+  let best: string | undefined;
+  let bestScore = 0;
+  let bestDelta = Infinity;
+
+  for (const tag of tags) {
+    const score = scoreTagMatch(name, tag);
+    if (score < 60) {
+      continue;
+    }
+
+    const delta = Math.abs(compactTagKey(tag).length - compactTagKey(name).length);
+    if (score > bestScore || (score === bestScore && delta < bestDelta)) {
+      best = tag;
+      bestScore = score;
+      bestDelta = delta;
+    }
+  }
+
+  return best;
 }
 
 export function colorFromProject(
@@ -312,9 +475,10 @@ export function tagColorFor(
   tagColors?: Record<string, string>,
   projectColors?: Record<string, string | null>,
 ): string {
-  const name = plan[category].trim().toLowerCase();
+  const name = plan[category].trim();
   return toColorInputValue(
     tagColors?.[name] ??
+      tagColors?.[name.toLowerCase()] ??
       colorFromProject(name, projectColors) ??
       TAG_CATEGORY_COLORS[category],
   );
@@ -474,8 +638,9 @@ export function findDoneStatusId(statuses: TaigaStatus[]): number | undefined {
   return statuses.find((status) => status.is_closed)?.id;
 }
 
-export function isDoneStatus(statusId: number, statuses: TaigaStatus[]): boolean {
-  const status = statuses.find((item) => item.id === statusId);
+export function isDoneStatus(statusId: number | string | undefined, statuses: TaigaStatus[]): boolean {
+  const resolved = toStatusId(statusId);
+  const status = statuses.find((item) => sameStatusId(item.id, resolved));
   if (!status) return false;
   return status.is_closed || statusMatches(status, DONE_ALIASES);
 }
@@ -619,7 +784,7 @@ export function buildManualDraft(
 ): Draft {
   const tags = meta?.tags ?? [];
   const pickTag = (preferred: string, index: number) =>
-    findExistingTag(preferred, tags) ?? tags[index] ?? preferred;
+    fuzzyMatchTag(preferred, tags) ?? tags[index] ?? preferred;
 
   const escopo = seed?.escopo?.trim() || 'App';
   const titulo = seed?.titulo?.trim() || 'Nova user story';

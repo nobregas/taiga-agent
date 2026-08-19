@@ -1,9 +1,10 @@
-<div class="app-select" [class.open]="open" [class.disabled]="disabled">
+<div class="app-select" [class.open]="open" [class.disabled]="disabled" [class.invalid]="invalid">
   <button
     type="button"
     class="app-select__trigger"
     [disabled]="disabled"
     [attr.aria-label]="ariaLabel || placeholder"
+    [attr.aria-invalid]="invalid"
     aria-haspopup="listbox"
     [attr.aria-expanded]="open"
     (click)="toggle()"

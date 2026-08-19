@@ -1,6 +1,7 @@
 import type { Draft } from '../schemas/draft.schema.js';
 import { parseUsDescription } from './us-description.js';
 import { flattenTagPlan, type StructuredTagPlan } from './tags.js';
+import { toStatusId } from './task-status.js';
 import type { TaigaTask, TaigaUserStory } from '../services/taiga.service.js';
 
 export function parseUsSubject(subject: string): { escopo: string; titulo: string } {
@@ -12,7 +13,7 @@ export function parseUsSubject(subject: string): { escopo: string; titulo: strin
 }
 
 export function tagPlanFromTagNames(tags: string[]): StructuredTagPlan {
-  const normalized = tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+  const normalized = tags.map((tag) => tag.trim()).filter(Boolean);
   const pad = [...normalized, 'app', 'front', 'feature', 'geral'];
   return {
     aplicacao: pad[0],
@@ -42,7 +43,7 @@ export function buildDraftFromUserStory(
     tags: flattenTagPlan(tagPlan),
     tagPlan,
     tagColors: {},
-    usStatusId: userStory.status,
+    usStatusId: toStatusId(userStory.status),
     milestoneId: userStory.milestone ?? null,
     mode: 'existing_us',
     existingUserStoryId: userStory.id,
@@ -50,7 +51,7 @@ export function buildDraftFromUserStory(
     tasks: tasks.map((task) => ({
       subject: task.subject,
       description: task.description,
-      statusId: task.status,
+      statusId: toStatusId(task.status),
       assignedTo: task.assigned_to ?? null,
     })),
   };

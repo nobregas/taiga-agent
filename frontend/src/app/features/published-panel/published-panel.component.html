@@ -31,7 +31,7 @@
             <button
               type="button"
               class="status-btn"
-              [class.active]="form.controls['usStatusId'].value === status.id"
+              [class.active]="sameStatusId(form.controls['usStatusId'].value, status.id)"
               (click)="setUsStatus(status.id)"
             >
               {{ status.name }}
@@ -40,12 +40,18 @@
         </div>
       </div>
 
-      @if (sprints.length) {
-        <label class="field field--sprint">
-          <span>Sprint</span>
-          <app-select formControlName="milestoneId" [options]="sprintOptions" placeholder="Sem sprint" />
-        </label>
-      }
+      <label class="field field--sprint" [class.field--invalid]="!!sprintError">
+        <span>Sprint</span>
+        <app-select
+          formControlName="milestoneId"
+          [options]="sprintOptions"
+          [invalid]="!!sprintError"
+          placeholder="Selecione a sprint"
+        />
+        @if (sprintError) {
+          <small class="field-error">{{ sprintError }}</small>
+        }
+      </label>
 
       <label class="field">
         <span>Contexto</span>

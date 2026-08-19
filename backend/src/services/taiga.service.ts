@@ -1,9 +1,10 @@
 import { runtimeConfig } from './runtime-config.service.js';
 import type { TaigaMilestone } from '../utils/sprints.js';
 import { pickDefaultSprintId } from '../utils/sprints.js';
-import { defaultOpenStatusId, findReadyForDevStatusId } from '../utils/task-status.js';
+import { defaultOpenStatusId, findReadyForDevStatusId, toStatusId } from '../utils/task-status.js';
 import { HttpError } from '../utils/http-error.js';
 import { toValidUserId } from '../utils/user-id.js';
+import { fuzzyMatchTag } from '../utils/tags.js';
 
 export interface TaigaStatus {
   id: number;
@@ -215,6 +216,10 @@ export class TaigaService {
     if (!response.ok) {
       const body = await response.text();
       console.error(`Taiga ${rest.method ?? 'GET'} ${path} → ${response.status}`, body);
+      if (response.status === 401) {
+        runtimeConfig.clearExpiredTaigaSession();
+        throw new HttpError('Sessao Taiga expirada. Entre novamente.', 401);
+      }
       const status = response.status >= 400 && response.status < 600 ? response.status : 502;
       throw new HttpError(`Taiga API error ${response.status}: ${body}`, status >= 500 ? 502 : status);
     }
@@ -441,7 +446,10 @@ export class TaigaService {
     let currentUser: TaigaUser | null = null;
     try {
       currentUser = await this.getCurrentUser();
-    } catch {
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 401) {
+        throw error;
+      }
       currentUser = null;
     }
 
@@ -595,6 +603,7 @@ export class TaigaService {
 
     const meta = await this.getProjectMeta(projectId);
     const openStatusId = defaultOpenStatusId(meta.taskStatuses);
+    const statusId = toStatusId(input.statusId) ?? openStatusId;
     // Sanitize regardless of source: an explicit-but-invalid id (e.g. a stale 0 coming
     // from a misconfigured merge-assignee) must never reach Taiga's assigned_to field.
     const assignedTo =
@@ -609,7 +618,7 @@ export class TaigaService {
         subject: input.subject,
         description: input.description ?? '',
         user_story: input.userStoryId,
-        status: input.statusId ?? openStatusId,
+        status: statusId,
         assigned_to: assignedTo,
       }),
     });
@@ -670,9 +679,9 @@ export class TaigaService {
     const ensured: string[] = [];
 
     for (const tag of tags) {
-      const existing = Object.keys(existingTagColors).find(
-        (item) => item.toLowerCase() === tag.name.toLowerCase(),
-      );
+      const existing =
+        fuzzyMatchTag(tag.name, Object.keys(existingTagColors)) ??
+        Object.keys(existingTagColors).find((item) => item.toLowerCase() === tag.name.toLowerCase());
 
       if (existing) {
         const currentColor = (existingTagColors[existing] ?? '').toLowerCase();
@@ -730,7 +739,7 @@ export class TaigaService {
         ...(input.subject ? { subject: input.subject } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.tags ? { tags: input.tags } : {}),
-        ...(input.statusId ? { status: input.statusId } : {}),
+        ...(toStatusId(input.statusId) ? { status: toStatusId(input.statusId) } : {}),
         ...(input.milestoneId !== undefined ? { milestone: input.milestoneId } : {}),
         ...(input.version ? { version: input.version } : {}),
       }),
@@ -752,7 +761,7 @@ export class TaigaService {
       body: JSON.stringify({
         ...(input.subject ? { subject: input.subject } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.statusId ? { status: input.statusId } : {}),
+        ...(toStatusId(input.statusId) ? { status: toStatusId(input.statusId) } : {}),
         ...(input.assignedTo !== undefined ? { assigned_to: toValidUserId(input.assignedTo) } : {}),
         ...(input.version ? { version: input.version } : {}),
       }),

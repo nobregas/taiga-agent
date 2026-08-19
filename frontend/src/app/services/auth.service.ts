@@ -3,6 +3,7 @@ import { Observable, of, shareReplay } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { AuthSession } from '../models/settings.models';
 import { ApiService } from './api.service';
+import { MetaService } from './meta.service';
 
 const emptySession = (taigaUrl = 'https://api.taiga.io/api/v1'): AuthSession => ({
   authenticated: false,
@@ -14,9 +15,11 @@ const emptySession = (taigaUrl = 'https://api.taiga.io/api/v1'): AuthSession => 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly api = inject(ApiService);
+  private readonly meta = inject(MetaService);
   private readonly sessionState = signal<AuthSession>(emptySession());
   private sessionLoaded = false;
   private inflight$: Observable<AuthSession> | null = null;
+  private expiring = false;
 
   readonly session = this.sessionState.asReadonly();
   readonly user = computed(() => this.sessionState().user);
@@ -56,6 +59,7 @@ export class AuthService {
   }
 
   logout(): Observable<AuthSession> {
+    this.meta.clear();
     return this.api.logout().pipe(
       tap((session) => this.setSession(session)),
       catchError(() => {
@@ -63,6 +67,26 @@ export class AuthService {
         return of(this.sessionState());
       }),
     );
+  }
+
+  expireSession(): void {
+    this.inflight$ = null;
+    this.meta.clear();
+    this.setSession(emptySession(this.sessionState().taigaUrl));
+
+    if (this.expiring) {
+      return;
+    }
+
+    this.expiring = true;
+    this.api.logout().subscribe({
+      next: () => {
+        this.expiring = false;
+      },
+      error: () => {
+        this.expiring = false;
+      },
+    });
   }
 
   userInitials(): string {
