@@ -6,26 +6,23 @@ Assistente local para gerar User Stories e Tasks no Taiga com IA (Gemini), enriq
 
 Pre-requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
-O repositorio e privado, entao a imagem no GHCR tambem e. Quem tem acesso ao repo sobe construindo localmente — sem `.env` e sem login no registry:
-
 ```bash
 git clone https://github.com/nobregas/taiga-agent.git
 cd taiga-agent
-docker compose up -d --build
+docker compose up -d
 ```
 
-Abra [http://localhost:4200](http://localhost:4200).
+Abra [http://localhost:4200](http://localhost:4200). Nao e necessario criar `.env` nem configurar porta.
 
 Credenciais do Taiga, Gemini e GitLab ficam na UI (Configuracoes / Workspaces) e persistem no volume `taiga-data`.
 
-### Atualizar
+Se a imagem ainda nao estiver no GitHub Container Registry, construa localmente:
 
 ```bash
-git pull
 docker compose up -d --build
 ```
 
-Opcional, se voce estiver logado no GHCR (`docker login ghcr.io -u USER --password-stdin` com um PAT que tenha `read:packages`):
+### Atualizar
 
 ```bash
 docker compose pull

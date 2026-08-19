@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    pull_policy: never
+    pull_policy: missing
     ports:
       - "4200:3000"
     volumes:
